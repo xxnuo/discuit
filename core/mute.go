@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"slices"
 	"sort"
@@ -11,6 +10,7 @@ import (
 
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
+	"gorm.io/gorm"
 )
 
 type MuteType string
@@ -75,7 +75,7 @@ func extractMuteID(s string) (t MuteType, id int, err error) {
 	return
 }
 
-func GetMutes(ctx context.Context, db *sql.DB, user uid.ID) ([]*Mute, error) {
+func GetMutes(ctx context.Context, db *gorm.DB, user uid.ID) ([]*Mute, error) {
 	communityMutes, err := GetMutedCommunities(ctx, db, user, true)
 	if err != nil {
 		return nil, err
@@ -95,8 +95,8 @@ func GetMutes(ctx context.Context, db *sql.DB, user uid.ID) ([]*Mute, error) {
 	return all, nil
 }
 
-func GetMutedCommunities(ctx context.Context, db *sql.DB, user uid.ID, fetchCommunities bool) ([]*Mute, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, community_id, created_at FROM muted_communities WHERE user_id = ? ORDER BY id", user)
+func GetMutedCommunities(ctx context.Context, db *gorm.DB, user uid.ID, fetchCommunities bool) ([]*Mute, error) {
+	rows, err := msql.QueryContext(ctx, db, "SELECT id, community_id, created_at FROM muted_communities WHERE user_id = ? ORDER BY id", user)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +138,8 @@ func GetMutedCommunities(ctx context.Context, db *sql.DB, user uid.ID, fetchComm
 	return mutes, nil
 }
 
-func GetMutedUsers(ctx context.Context, db *sql.DB, user uid.ID, fillUsers bool) ([]*Mute, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, muted_user_id, created_at FROM muted_users WHERE user_id = ? ORDER BY id", user)
+func GetMutedUsers(ctx context.Context, db *gorm.DB, user uid.ID, fillUsers bool) ([]*Mute, error) {
+	rows, err := msql.QueryContext(ctx, db, "SELECT id, muted_user_id, created_at FROM muted_users WHERE user_id = ? ORDER BY id", user)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func GetMutedUsers(ctx context.Context, db *sql.DB, user uid.ID, fillUsers bool)
 	return mutes, nil
 }
 
-func Unmute(ctx context.Context, db *sql.DB, user uid.ID, id string) error {
+func Unmute(ctx context.Context, db *gorm.DB, user uid.ID, id string) error {
 	mType, idInt, err := extractMuteID(id)
 	if err != nil {
 		return err
@@ -188,56 +188,56 @@ func Unmute(ctx context.Context, db *sql.DB, user uid.ID, id string) error {
 
 	switch mType {
 	case MuteTypeCommunity:
-		_, err = db.ExecContext(ctx, "delete from muted_communities where id = ? and user_id = ?", idInt, user)
+		_, err = msql.ExecContext(ctx, db, "delete from muted_communities where id = ? and user_id = ?", idInt, user)
 	case MuteTypeUser:
-		_, err = db.ExecContext(ctx, "delete from muted_users where id = ? and user_id = ?", idInt, user)
+		_, err = msql.ExecContext(ctx, db, "delete from muted_users where id = ? and user_id = ?", idInt, user)
 	}
 	return err
 }
 
 // ClearMutes clears all mutes of user if t is empty, otherwise it clears either
 // the community or the user mutes.
-func ClearMutes(ctx context.Context, db *sql.DB, user uid.ID, t MuteType) (err error) {
+func ClearMutes(ctx context.Context, db *gorm.DB, user uid.ID, t MuteType) (err error) {
 	if t == "" || t == MuteTypeCommunity {
-		_, err = db.ExecContext(ctx, "DELETE FROM muted_communities WHERE user_id = ?", user)
+		_, err = msql.ExecContext(ctx, db, "DELETE FROM muted_communities WHERE user_id = ?", user)
 		if err != nil {
 			return
 		}
 	}
 	if t == "" || t == MuteTypeUser {
-		_, err = db.ExecContext(ctx, "DELETE FROM muted_users where user_id = ?", user)
+		_, err = msql.ExecContext(ctx, db, "DELETE FROM muted_users where user_id = ?", user)
 	}
 	return
 }
 
-func MuteCommunity(ctx context.Context, db *sql.DB, user, community uid.ID) error {
-	_, err := db.ExecContext(ctx, "INSERT INTO muted_communities (user_id, community_id) VALUES (?, ?)", user, community)
+func MuteCommunity(ctx context.Context, db *gorm.DB, user, community uid.ID) error {
+	_, err := msql.ExecContext(ctx, db, "INSERT INTO muted_communities (user_id, community_id) VALUES (?, ?)", user, community)
 	if err != nil && msql.IsErrDuplicateErr(err) {
 		return nil
 	}
 	return err
 }
 
-func UnmuteCommunity(ctx context.Context, db *sql.DB, user, community uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM muted_communities WHERE user_id = ? AND community_id = ?", user, community)
+func UnmuteCommunity(ctx context.Context, db *gorm.DB, user, community uid.ID) error {
+	_, err := msql.ExecContext(ctx, db, "DELETE FROM muted_communities WHERE user_id = ? AND community_id = ?", user, community)
 	return err
 }
 
-func MuteUser(ctx context.Context, db *sql.DB, user, mutedUser uid.ID) error {
+func MuteUser(ctx context.Context, db *gorm.DB, user, mutedUser uid.ID) error {
 	if is, err := UserDeleted(db, mutedUser); err != nil {
 		return err
 	} else if is {
 		return ErrUserDeleted
 	}
 
-	_, err := db.ExecContext(ctx, "INSERT INTO muted_users (user_id, muted_user_id) VALUES (?, ?)", user, mutedUser)
+	_, err := msql.ExecContext(ctx, db, "INSERT INTO muted_users (user_id, muted_user_id) VALUES (?, ?)", user, mutedUser)
 	if err != nil && msql.IsErrDuplicateErr(err) {
 		return nil
 	}
 	return err
 }
 
-func UnmuteUser(ctx context.Context, db *sql.DB, user, mutedUser uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM muted_users WHERE user_id = ? AND muted_user_id = ?", user, mutedUser)
+func UnmuteUser(ctx context.Context, db *gorm.DB, user, mutedUser uid.ID) error {
+	_, err := msql.ExecContext(ctx, db, "DELETE FROM muted_users WHERE user_id = ? AND muted_user_id = ?", user, mutedUser)
 	return err
 }

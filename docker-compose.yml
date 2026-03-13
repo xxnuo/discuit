@@ -2,23 +2,26 @@ version: "3"
 
 services:
   discuit:
-    build: .
+    # build: .
+    image: discuit
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "1080:80"
     environment:
       DISCUIT_ADDR: ":80"
+      DISCUIT_DB_DRIVER: "sqlite3"
+      DISCUIT_DB_DSN: "/app/data/discuit.db"
       DISCUIT_SITE_NAME: "Discuit"
       DISCUIT_SESSION_COOKIE_NAME: "DSID"
       DISCUIT_REDIS_ADDRESS: "127.0.0.1:6379"
       DISCUIT_FORUM_CREATION_REQ_POINTS: "10"
       DISCUIT_MAX_FORUMS_PER_USER: "10"
     volumes:
-      - discuit-db:/var/lib/mysql
+      - discuit-data:/app/data
       - discuit-redis:/var/lib/redis
       - discuit-images:/app/images
 
 volumes:
-  discuit-db:
+  discuit-data:
   discuit-redis:
   discuit-images:

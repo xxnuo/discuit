@@ -3,7 +3,6 @@ package server
 import (
 	"compress/gzip"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -33,6 +32,7 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+	"gorm.io/gorm"
 )
 
 var (
@@ -48,7 +48,7 @@ var (
 type Server struct {
 	config *config.Config
 
-	db        *sql.DB
+	db        *gorm.DB
 	redisPool *redis.Pool
 
 	// for /api routes
@@ -73,7 +73,7 @@ type Server struct {
 	webPushVAPIDKeys core.VAPIDKeys
 }
 
-func New(db *sql.DB, conf *config.Config) (*Server, error) {
+func New(db *gorm.DB, conf *config.Config) (*Server, error) {
 	r := mux.NewRouter()
 
 	redisStore, err := sessions.NewRedisStore("tcp", conf.RedisAddress, conf.SessionCookieName)
@@ -284,7 +284,7 @@ func (s *Server) Close() error {
 // updateUserLastSeen updates the last seen time and the last seen IP address of
 // the logged in user, if the user is logged in, in Redis and persists it to
 // MariaDB.
-func updateUserLastSeen(ctx context.Context, w http.ResponseWriter, r *http.Request, db *sql.DB, ses *sessions.Session) error {
+func updateUserLastSeen(ctx context.Context, w http.ResponseWriter, r *http.Request, db *gorm.DB, ses *sessions.Session) error {
 	loggedIn, uid := isLoggedIn(ses)
 	if !loggedIn {
 		return nil

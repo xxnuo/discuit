@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/discuitnet/discuit/core"
+	"github.com/go-sql-driver/mysql"
 	"gopkg.in/yaml.v2"
 )
 
@@ -21,7 +22,9 @@ type Config struct {
 	SiteName        string `yaml:"siteName"`
 	SiteDescription string `yaml:"siteDescription"` // Used for meta tags.
 
-	// Primary DB credentials.
+	DBDriver string `yaml:"dbDriver"`
+	DBDSN    string `yaml:"dbDSN"`
+
 	DBAddr     string `yaml:"dbAddr"`
 	DBUser     string `yaml:"dbUser"`
 	DBPassword string `yaml:"dbPassword"`
@@ -97,8 +100,9 @@ type Config struct {
 // Parse parses the yaml file at path and returns a Config.
 func Parse(path string) (*Config, error) {
 	c := &Config{
-		// Default values.
 		Addr:               ":8080",
+		DBDriver:           "sqlite3",
+		DBDSN:              "discuit.db",
 		DBUser:             "discuit",
 		SessionCookieName:  "SID",
 		RedisAddress:       ":6379",
@@ -108,7 +112,6 @@ func Parse(path string) (*Config, error) {
 		MaxImageSize:       25 * (1 << 20),
 		MaxImagesPerPost:   10,
 
-		// Required fields:
 		ForumCreationRequiredPoints: -1,
 		MaxForumsPerUser:            -1,
 	}
@@ -122,7 +125,9 @@ func Parse(path string) (*Config, error) {
 		"DISCUIT_SITE_NAME":        &c.SiteName,
 		"DISCUIT_SITE_DESCRIPTION": &c.SiteDescription,
 
-		// Primary DB credentials.
+		"DISCUIT_DB_DRIVER": &c.DBDriver,
+		"DISCUIT_DB_DSN":    &c.DBDSN,
+
 		"DISCUIT_DB_ADDR":     &c.DBAddr,
 		"DISCUIT_DB_USER":     &c.DBUser,
 		"DISCUIT_DB_PASSWORD": &c.DBPassword,
@@ -220,6 +225,36 @@ func Parse(path string) (*Config, error) {
 	}
 	if c.MaxForumsPerUser == -1 {
 		return nil, errors.New("MaxForumsPerUser cannot be (-1)")
+	}
+
+	if strings.TrimSpace(c.DBDSN) == "" {
+		driver := strings.ToLower(strings.TrimSpace(c.DBDriver))
+		if driver == "" || driver == "mariadb" || driver == "mysql" || c.DBAddr != "" || c.DBName != "" {
+			cfg := mysql.NewConfig()
+			cfg.Net = "tcp"
+			cfg.Addr = c.DBAddr
+			cfg.User = c.DBUser
+			cfg.Passwd = c.DBPassword
+			cfg.DBName = c.DBName
+			cfg.ParseTime = true
+			c.DBDriver = "mariadb"
+			c.DBDSN = cfg.FormatDSN()
+		} else {
+			switch driver {
+			case "postgres":
+				c.DBDriver = "postgresql"
+			case "sqlite":
+				c.DBDriver = "sqlite3"
+			}
+		}
+	}
+
+	if strings.TrimSpace(c.DBDriver) == "" {
+		c.DBDriver = "sqlite3"
+	}
+
+	if strings.TrimSpace(c.DBDSN) == "" {
+		c.DBDSN = "discuit.db"
 	}
 
 	return c, nil

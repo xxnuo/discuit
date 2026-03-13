@@ -1,5 +1,5 @@
 # Use official Go image for the backend build
-FROM golang:1.21 AS backend-builder
+FROM golang:1.23 AS backend-builder
 
 # Install runtime dependencies (libvips)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -41,7 +41,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    mariadb-server \
     redis-server \
     libvips-dev && \
     libvips=8.8.4 && \
@@ -52,7 +51,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=frontend-builder /app/ui /app/ui
 COPY --from=backend-builder /app/discuit /app/discuit
 COPY config.default.yaml /app/config.yaml
-COPY migrations /app/migrations
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"crypto/md5"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
+	"gorm.io/gorm"
 )
 
 // AnalyticsEven represents a record in the analytics table.
@@ -24,7 +24,7 @@ type AnalyticsEvent struct {
 
 // CreateAnalyticsEvent adds a record to the analytics table. If uniqueKey is
 // empty, it is ignored.
-func CreateAnalyticsEvent(ctx context.Context, db *sql.DB, name string, uniqueKey string, payload string) error {
+func CreateAnalyticsEvent(ctx context.Context, db *gorm.DB, name string, uniqueKey string, payload string) error {
 	var uniqueKeyHash []byte
 	if uniqueKey != "" {
 		sum := md5.Sum([]byte(uniqueKey))
@@ -37,7 +37,7 @@ func CreateAnalyticsEvent(ctx context.Context, db *sql.DB, name string, uniqueKe
 		{Name: "payload", Value: payload},
 	})
 
-	_, err := db.ExecContext(ctx, query, args...)
+	_, err := msql.ExecContext(ctx, db, query, args...)
 	if err != nil && !msql.IsErrDuplicateErr(err) {
 		return err
 	}
@@ -63,45 +63,50 @@ type BasicSiteStats struct {
 
 const BasicSiteStatsEventName = "bss"
 
-func RecordBasicSiteStats(ctx context.Context, db *sql.DB) error {
+func RecordBasicSiteStats(ctx context.Context, db *gorm.DB) error {
 	stats := &BasicSiteStats{Version: 0}
-	if err := db.QueryRow("select count(*) from users where last_seen > subdate(now(), 1)").Scan(&stats.UsersLastDay); err != nil {
+	now := time.Now()
+	lastDay := now.Add(-24 * time.Hour)
+	lastWeek := now.Add(-7 * 24 * time.Hour)
+	lastMonth := now.Add(-30 * 24 * time.Hour)
+
+	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ?", lastDay).Scan(&stats.UsersLastDay); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from users where last_seen > subdate(now(), 7)").Scan(&stats.UsersLastWeek); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ?", lastWeek).Scan(&stats.UsersLastWeek); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from users where last_seen > subdate(now(), 30)").Scan(&stats.UsersLastMonth); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ?", lastMonth).Scan(&stats.UsersLastMonth); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from users where last_seen > subdate(now(), 1) and created_at <= subdate(now(), 1)").Scan(&stats.ReturnUsersLastDay); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ? and created_at <= ?", lastDay, lastDay).Scan(&stats.ReturnUsersLastDay); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from users where last_seen > subdate(now(), 7) and created_at <= subdate(now(), 7)").Scan(&stats.ReturnUsersLastWeek); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ? and created_at <= ?", lastWeek, lastWeek).Scan(&stats.ReturnUsersLastWeek); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from users where last_seen > subdate(now(), 30) and created_at <= subdate(now(), 30)").Scan(&stats.ReturnUsersLastMonth); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ? and created_at <= ?", lastMonth, lastMonth).Scan(&stats.ReturnUsersLastMonth); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from users").Scan(&stats.TotalSignups); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from users").Scan(&stats.TotalSignups); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from analytics").Scan(&stats.PWAInstalls); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from analytics").Scan(&stats.PWAInstalls); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from web_push_subscriptions").Scan(&stats.PushNotifications); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from web_push_subscriptions").Scan(&stats.PushNotifications); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from posts where created_at > subdate(now(), 1)").Scan(&stats.PostsLastDay); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from posts where created_at > ?", lastDay).Scan(&stats.PostsLastDay); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from posts where created_at > subdate(now(), 7)").Scan(&stats.PostsLastWeek); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from posts where created_at > ?", lastWeek).Scan(&stats.PostsLastWeek); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from comments where created_at > subdate(now(), 1)").Scan(&stats.CommentsLastDay); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from comments where created_at > ?", lastDay).Scan(&stats.CommentsLastDay); err != nil {
 		return err
 	}
-	if err := db.QueryRow("select count(*) from comments where created_at > subdate(now(), 7)").Scan(&stats.CommentsLastWeek); err != nil {
+	if err := msql.QueryRow(db, "select count(*) from comments where created_at > ?", lastWeek).Scan(&stats.CommentsLastWeek); err != nil {
 		return err
 	}
 
@@ -109,7 +114,7 @@ func RecordBasicSiteStats(ctx context.Context, db *sql.DB) error {
 	return CreateAnalyticsEvent(ctx, db, BasicSiteStatsEventName, "", string(b))
 }
 
-func GetBasicSiteStats(ctx context.Context, db *sql.DB, limit int, next string) ([]*AnalyticsEvent, string, error) {
+func GetBasicSiteStats(ctx context.Context, db *gorm.DB, limit int, next string) ([]*AnalyticsEvent, string, error) {
 	limitQuery := ""
 	if limit > 0 {
 		limitQuery = "LIMIT " + strconv.Itoa(limit+1)
@@ -131,7 +136,7 @@ func GetBasicSiteStats(ctx context.Context, db *sql.DB, limit int, next string) 
 
 	query = fmt.Sprintf("%s %s ORDER BY created_at DESC %s", query, nextQuery, limitQuery)
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, "", err
 	}

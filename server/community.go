@@ -14,10 +14,11 @@ import (
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/gorilla/mux"
+	"gorm.io/gorm"
 )
 
 // userModOrAdmin returns true is user is either a mod of c or an admin or both.
-func userModOrAdmin(ctx context.Context, db *sql.DB, user uid.ID, c *core.Community) (bool, error) {
+func userModOrAdmin(ctx context.Context, db *gorm.DB, user uid.ID, c *core.Community) (bool, error) {
 	if c.ViewerMod.Bool {
 		return true, nil
 	} else {

@@ -20,6 +20,8 @@ import (
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/discuitnet/discuit/internal/utils"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -50,7 +52,7 @@ type VAPIDKeys struct {
 
 const vapidKeysDBKey = "vapid_keys" // for the key column of the application_data table
 
-func saveVAPIDKeys(ctx context.Context, db *sql.DB) (*VAPIDKeys, error) {
+func saveVAPIDKeys(ctx context.Context, db *gorm.DB) (*VAPIDKeys, error) {
 	private, public, err := webpush.GenerateVAPIDKeys()
 	if err != nil {
 		return nil, err
@@ -65,7 +67,7 @@ func saveVAPIDKeys(ctx context.Context, db *sql.DB) (*VAPIDKeys, error) {
 		return nil, err
 	}
 
-	if _, err := db.ExecContext(ctx, "INSERT INTO application_data (`key`, `value`) VALUES (?, ?)", vapidKeysDBKey, string(data)); err != nil {
+	if _, err := msql.ExecContext(ctx, db, "INSERT INTO application_data (`key`, `value`) VALUES (?, ?)", vapidKeysDBKey, string(data)); err != nil {
 		return nil, err
 	}
 	return pair, nil
@@ -74,9 +76,9 @@ func saveVAPIDKeys(ctx context.Context, db *sql.DB) (*VAPIDKeys, error) {
 // GetApplicationVAPIDKeys returns a pair of VAPID public/private keys used by
 // the Web Push API. If no keys are found in the application_data table in the
 // database, a new key-value pair is generated, saved, and returned.
-func GetApplicationVAPIDKeys(ctx context.Context, db *sql.DB) (*VAPIDKeys, error) {
+func GetApplicationVAPIDKeys(ctx context.Context, db *gorm.DB) (*VAPIDKeys, error) {
 	rawJSON := ""
-	row := db.QueryRowContext(ctx, "SELECT `value` FROM application_data WHERE `key` = ?", vapidKeysDBKey)
+	row := msql.QueryRowContext(ctx, db, "SELECT `value` FROM application_data WHERE `key` = ?", vapidKeysDBKey)
 	if err := row.Scan(&rawJSON); err != nil {
 		if err == sql.ErrNoRows {
 			return saveVAPIDKeys(ctx, db)
@@ -110,29 +112,40 @@ type WebPushSubscription struct {
 // SaveWebPushSubscription adds an entry into web_push_notifications table. If
 // there's a collision (a duplicate for sessionID), it updates the matching row.
 // It is safe to call this function repeatedly with the same arguments.
-func SaveWebPushSubscription(ctx context.Context, db *sql.DB, sessionID string, user uid.ID, s webpush.Subscription) error {
+func SaveWebPushSubscription(ctx context.Context, db *gorm.DB, sessionID string, user uid.ID, s webpush.Subscription) error {
 	rawJSON, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, `INSERT INTO web_push_subscriptions (session_id, user_id, push_subscription) 
-		VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE push_subscription = ?, updated_at = CURRENT_TIMESTAMP()`,
-		sessionID, user, rawJSON, rawJSON)
-
-	return err
+	return db.WithContext(ctx).
+		Table("web_push_subscriptions").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "session_id"}},
+			DoUpdates: clause.Assignments(map[string]any{
+				"push_subscription": string(rawJSON),
+				"updated_at":        time.Now(),
+			}),
+		}).
+		Create(map[string]any{
+			"session_id":        sessionID,
+			"user_id":           user,
+			"push_subscription": string(rawJSON),
+			"updated_at":        time.Now(),
+		}).
+		Error
 }
 
 // DeleteWebPushSuscription deletes the Push Subscription object associated with
 // sessionID (if there is one).
 //
 // Make sure to call this function before logging out a user.
-func DeleteWebPushSubscription(ctx context.Context, db *sql.DB, sessionID string) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM web_push_subscriptions WHERE session_id = ?", sessionID)
+func DeleteWebPushSubscription(ctx context.Context, db *gorm.DB, sessionID string) error {
+	_, err := msql.ExecContext(ctx, db, "DELETE FROM web_push_subscriptions WHERE session_id = ?", sessionID)
 	return err
 }
 
 // userWebPushSubscriptions returns all the Web Push Subscriptions of the user.
-func userWebPushSubscriptions(ctx context.Context, db *sql.DB, user uid.ID) ([]*WebPushSubscription, error) {
+func userWebPushSubscriptions(ctx context.Context, db *gorm.DB, user uid.ID) ([]*WebPushSubscription, error) {
 	s := msql.BuildSelectQuery("web_push_subscriptions", []string{
 		"id",
 		"session_id",
@@ -142,7 +155,7 @@ func userWebPushSubscriptions(ctx context.Context, db *sql.DB, user uid.ID) ([]*
 		"updated_at",
 	}, nil, "WHERE user_id = ?")
 
-	rows, err := db.QueryContext(ctx, s, user)
+	rows, err := msql.QueryContext(ctx, db, s, user)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +181,7 @@ func userWebPushSubscriptions(ctx context.Context, db *sql.DB, user uid.ID) ([]*
 
 // SendPushNotification sends the Web Push notification in payload to all
 // sessions of user (that has web notifications enabled).
-func SendPushNotification(ctx context.Context, db *sql.DB, user uid.ID, payload []byte, options *webpush.Options) error {
+func SendPushNotification(ctx context.Context, db *gorm.DB, user uid.ID, payload []byte, options *webpush.Options) error {
 	subs, err := userWebPushSubscriptions(ctx, db, user)
 	if err != nil {
 		return err
@@ -221,8 +234,8 @@ func (t NotificationType) Valid() bool {
 type notification interface {
 	// view returns a view of the notification with the fields Title, Body,
 	// Icons, and ToURL set to valid values.
-	view(context.Context, *sql.DB, TextFormat) (*NotificationView, error)
-	marshalJSONForAPI(context.Context, *sql.DB) ([]byte, error)
+	view(context.Context, *gorm.DB, TextFormat) (*NotificationView, error)
+	marshalJSONForAPI(context.Context, *gorm.DB) ([]byte, error)
 }
 
 type TextFormat string
@@ -303,7 +316,7 @@ type Notification struct {
 	ctx                   context.Context // This value is valid only once PreMarshalJSON method is invoked.
 	render                bool
 	renderTextFormat      TextFormat
-	db                    *sql.DB
+	db                    *gorm.DB
 }
 
 func (n *Notification) PreMarshalJSON(ctx context.Context, render bool, format TextFormat) {
@@ -380,7 +393,7 @@ var selectNotificationCols = []string{
 	"notifications.updated_at",
 }
 
-func scanNotifications(ctx context.Context, db *sql.DB, rows *sql.Rows, render bool, format TextFormat) ([]*Notification, error) {
+func scanNotifications(ctx context.Context, db *gorm.DB, rows *sql.Rows, render bool, format TextFormat) ([]*Notification, error) {
 	if !(format == "" || format == TextFormatsHTML) {
 		return nil, httperr.NewBadRequest("invalid-render-format", "Invalid render format.")
 	}
@@ -447,8 +460,14 @@ func scanNotifications(ctx context.Context, db *sql.DB, rows *sql.Rows, render b
 
 // removeExcessNotifications keeps only the latest MaxNotificationsPerUser
 // notifications of user. The number of notifications removed is returned.
-func removeExcessNotifications(ctx context.Context, db *sql.DB, user uid.ID) (n int, err error) {
-	rows, err := db.QueryContext(ctx, "SELECT id FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT ?,10000000", user, MaxNotificationsPerUser)
+func removeExcessNotifications(ctx context.Context, db *gorm.DB, user uid.ID) (n int, err error) {
+	rows, err := db.WithContext(ctx).
+		Table("notifications").
+		Select("id").
+		Where("user_id = ?", user).
+		Order("id DESC").
+		Offset(MaxNotificationsPerUser).
+		Rows()
 	if err != nil {
 		return
 	}
@@ -468,14 +487,14 @@ func removeExcessNotifications(ctx context.Context, db *sql.DB, user uid.ID) (n 
 	}
 
 	if len(ids) > 0 {
-		_, err = db.ExecContext(ctx, "DELETE FROM notifications WHERE id IN "+msql.InClauseQuestionMarks(len(ids)), ids...)
+		_, err = msql.ExecContext(ctx, db, "DELETE FROM notifications WHERE id IN "+msql.InClauseQuestionMarks(len(ids)), ids...)
 	}
 	n = len(ids)
 	return
 }
 
 // CreateNotification adds a new notification to user's notifications stack.
-func CreateNotification(ctx context.Context, db *sql.DB, user uid.ID, Type NotificationType, notif notification) error {
+func CreateNotification(ctx context.Context, db *gorm.DB, user uid.ID, Type NotificationType, notif notification) error {
 	if is, err := UserDeleted(db, user); err != nil {
 		return err
 	} else if is {
@@ -488,13 +507,12 @@ func CreateNotification(ctx context.Context, db *sql.DB, user uid.ID, Type Notif
 		return err
 	}
 
-	res, err := db.ExecContext(ctx, "INSERT INTO notifications (user_id, type, notif) VALUES (?, ?, ?)", user, Type, data)
-	if err != nil {
+	if _, err := msql.ExecContext(ctx, db, "INSERT INTO notifications (user_id, type, notif) VALUES (?, ?, ?)", user, Type, data); err != nil {
 		return err
 	}
 
-	lastID, err := res.LastInsertId()
-	if err != nil {
+	var lastID int
+	if err := msql.QueryRowContext(ctx, db, "SELECT id FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 1", user).Scan(&lastID); err != nil {
 		return err
 	}
 
@@ -525,9 +543,9 @@ func CreateNotification(ctx context.Context, db *sql.DB, user uid.ID, Type Notif
 	return err
 }
 
-func GetNotification(ctx context.Context, db *sql.DB, ID string, render bool, format TextFormat) (*Notification, error) {
+func GetNotification(ctx context.Context, db *gorm.DB, ID string, render bool, format TextFormat) (*Notification, error) {
 	query := msql.BuildSelectQuery("notifications", selectNotificationCols, nil, "WHERE id = ?")
-	rows, err := db.QueryContext(ctx, query, ID)
+	rows, err := msql.QueryContext(ctx, db, query, ID)
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +578,7 @@ func (n *notificationsPaginationCursor) decode(s string) error {
 // GetNotifications returns notifications of user. If limit is 0, all
 // notifications are returned. The string returned is the pagination cursor of
 // the next fetch.
-func GetNotifications(ctx context.Context, db *sql.DB, user uid.ID, limit int, cursor string, render bool, format TextFormat) ([]*Notification, string, error) {
+func GetNotifications(ctx context.Context, db *gorm.DB, user uid.ID, limit int, cursor string, render bool, format TextFormat) ([]*Notification, string, error) {
 	var args []interface{}
 	args = append(args, user)
 	where := "WHERE user_id = ?"
@@ -579,7 +597,7 @@ func GetNotifications(ctx context.Context, db *sql.DB, user uid.ID, limit int, c
 	}
 
 	query := msql.BuildSelectQuery("notifications", selectNotificationCols, nil, where)
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -600,8 +618,8 @@ func GetNotifications(ctx context.Context, db *sql.DB, user uid.ID, limit int, c
 }
 
 // NotificationsCount returns the number of notifications of user.
-func NotificationsCount(ctx context.Context, db *sql.DB, user uid.ID) (n int, err error) {
-	err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE user_id = ?", user).Scan(&n)
+func NotificationsCount(ctx context.Context, db *gorm.DB, user uid.ID) (n int, err error) {
+	err = msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM notifications WHERE user_id = ?", user).Scan(&n)
 	return
 }
 
@@ -614,7 +632,7 @@ func (n *Notification) Saw(ctx context.Context, seen bool) error {
 		t = &now
 	}
 
-	if _, err := n.db.ExecContext(ctx, "UPDATE notifications SET seen = ?, seen_at = ? WHERE id = ?", seen, t, n.ID); err != nil {
+	if _, err := msql.ExecContext(ctx, n.db, "UPDATE notifications SET seen = ?, seen_at = ? WHERE id = ?", seen, t, n.ID); err != nil {
 		return err
 	}
 
@@ -624,7 +642,7 @@ func (n *Notification) Saw(ctx context.Context, seen bool) error {
 }
 
 func (n *Notification) Delete(ctx context.Context) error {
-	_, err := n.db.ExecContext(ctx, "DELETE FROM notifications WHERE id = ?", n.ID)
+	_, err := msql.ExecContext(ctx, n.db, "DELETE FROM notifications WHERE id = ?", n.ID)
 	return err
 }
 
@@ -636,7 +654,7 @@ func (n *Notification) Update(ctx context.Context) error {
 		return err
 	}
 
-	if _, err := n.db.ExecContext(ctx, "UPDATE notifications SET notif = ?, updated_at = ? WHERE id = ?", n.notifRawJSON, time.Now(), n.ID); err != nil {
+	if _, err := msql.ExecContext(ctx, n.db, "UPDATE notifications SET notif = ?, updated_at = ? WHERE id = ?", n.notifRawJSON, time.Now(), n.ID); err != nil {
 		return err
 	}
 
@@ -715,7 +733,7 @@ type NotificationNewComment struct {
 	FirstCreatedAt time.Time `json:"firstCreatedAt"`
 }
 
-func (n NotificationNewComment) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationNewComment) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationNewComment
 	out := struct {
 		T
@@ -742,7 +760,7 @@ func encloseInBold(format TextFormat, text string) string {
 	return text
 }
 
-func (n NotificationNewComment) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationNewComment) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	post, err := GetPost(ctx, db, &n.PostID, "", nil, true)
 	if err != nil {
 		return nil, err
@@ -766,7 +784,7 @@ func (n NotificationNewComment) view(ctx context.Context, db *sql.DB, format Tex
 
 // CreateNewCommentNotification creates a notification of type new_comment. If
 // an identical notification exists in the last 10 items, it is deleted.
-func CreateNewCommentNotification(ctx context.Context, db *sql.DB, post *Post, comment uid.ID, author *User) error {
+func CreateNewCommentNotification(ctx context.Context, db *gorm.DB, post *Post, comment uid.ID, author *User) error {
 	user, err := GetUser(ctx, db, post.AuthorID, nil)
 	if err != nil {
 		return err
@@ -826,7 +844,7 @@ type NotificationCommentReply struct {
 	FirstCreatedAt time.Time `json:"firstCreatedAt"`
 }
 
-func (n NotificationCommentReply) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationCommentReply) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationCommentReply
 	out := struct {
 		T
@@ -843,7 +861,7 @@ func (n NotificationCommentReply) marshalJSONForAPI(ctx context.Context, db *sql
 	return json.Marshal(out)
 }
 
-func (n NotificationCommentReply) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationCommentReply) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	post, err := GetPost(ctx, db, &n.PostID, "", nil, true)
 	if err != nil {
 		return nil, err
@@ -867,7 +885,7 @@ func (n NotificationCommentReply) view(ctx context.Context, db *sql.DB, format T
 
 // CreateCommentReplyNotification creates a notification of type comment_reply.
 // If an identical notification exists in the last 10 items, it is deleted.
-func CreateCommentReplyNotification(ctx context.Context, db *sql.DB, receiver uid.ID, parent, comment uid.ID, author *User, post *Post) error {
+func CreateCommentReplyNotification(ctx context.Context, db *gorm.DB, receiver uid.ID, parent, comment uid.ID, author *User, post *Post) error {
 	user, err := GetUser(ctx, db, receiver, nil)
 	if err != nil {
 		return err
@@ -908,19 +926,19 @@ func CreateCommentReplyNotification(ctx context.Context, db *sql.DB, receiver ui
 	return CreateNotification(ctx, db, receiver, NotificationTypeCommentReply, n)
 }
 
-func updateNewNotificationsCount(ctx context.Context, db *sql.DB, user uid.ID) error {
-	_, err := db.ExecContext(ctx, "UPDATE users SET notifications_new_count = (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND seen = FALSE) WHERE id = ?", user, user)
+func updateNewNotificationsCount(ctx context.Context, db *gorm.DB, user uid.ID) error {
+	_, err := msql.ExecContext(ctx, db, "UPDATE users SET notifications_new_count = (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND seen = FALSE) WHERE id = ?", user, user)
 	return err
 }
 
-func resetNewNotificationsCount(ctx context.Context, db *sql.DB, user uid.ID) error {
-	_, err := db.ExecContext(ctx, "UPDATE users SET notifications_new_count = 0 WHERE id = ?", user)
+func resetNewNotificationsCount(ctx context.Context, db *gorm.DB, user uid.ID) error {
+	_, err := msql.ExecContext(ctx, db, "UPDATE users SET notifications_new_count = 0 WHERE id = ?", user)
 	return err
 }
 
 // markAllNotificationsAsSeen marks all notifications of user as seen if t is
 // zero, or only notifications of type t, if t is not zero.
-func markAllNotificationsAsSeen(ctx context.Context, db *sql.DB, user uid.ID, t NotificationType) error {
+func markAllNotificationsAsSeen(ctx context.Context, db *gorm.DB, user uid.ID, t NotificationType) error {
 	query := "UPDATE notifications SET seen = TRUE, seen_at = ? WHERE user_id = ? "
 	var args []any
 	args = append(args, time.Now(), user)
@@ -929,12 +947,12 @@ func markAllNotificationsAsSeen(ctx context.Context, db *sql.DB, user uid.ID, t 
 		query += "and type = ?"
 		args = append(args, t)
 	}
-	_, err := db.ExecContext(ctx, query, args...)
+	_, err := msql.ExecContext(ctx, db, query, args...)
 	return err
 }
 
-func deleteAllNotifications(ctx context.Context, db *sql.DB, user uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM notifications WHERE user_id = ?", user)
+func deleteAllNotifications(ctx context.Context, db *gorm.DB, user uid.ID) error {
+	_, err := msql.ExecContext(ctx, db, "DELETE FROM notifications WHERE user_id = ?", user)
 	return err
 }
 
@@ -945,7 +963,7 @@ type NotificationNewVotes struct {
 	NoVotes    int    `json:"noVotes"`
 }
 
-func (n NotificationNewVotes) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationNewVotes) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationNewVotes
 	out := struct {
 		T
@@ -977,7 +995,7 @@ func (n NotificationNewVotes) marshalJSONForAPI(ctx context.Context, db *sql.DB)
 	return json.Marshal(out)
 }
 
-func (n NotificationNewVotes) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationNewVotes) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	view := &NotificationView{}
 	if n.TargetType == "post" {
 		post, err := GetPost(ctx, db, &n.TargetID, "", nil, true)
@@ -1004,7 +1022,7 @@ func (n NotificationNewVotes) view(ctx context.Context, db *sql.DB, format TextF
 }
 
 // CreateNewVotesNotification creates a notification of type "new_votes".
-func CreateNewVotesNotification(ctx context.Context, db *sql.DB, user uid.ID, community string, isPost bool, targetID uid.ID) error {
+func CreateNewVotesNotification(ctx context.Context, db *gorm.DB, user uid.ID, community string, isPost bool, targetID uid.ID) error {
 	if user, err := GetUser(ctx, db, user, nil); err != nil {
 		return err
 	} else if user.UpvoteNotificationsOff {
@@ -1046,7 +1064,7 @@ type NotificationPostDeleted struct {
 	DeletedAs  UserGroup `json:"deletedAs"`
 }
 
-func (n NotificationPostDeleted) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationPostDeleted) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationPostDeleted
 	out := struct {
 		T
@@ -1072,7 +1090,7 @@ func (n NotificationPostDeleted) marshalJSONForAPI(ctx context.Context, db *sql.
 	return json.Marshal(out)
 }
 
-func (n NotificationPostDeleted) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationPostDeleted) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	post, err := GetPost(ctx, db, &n.TargetID, "", nil, true)
 	if err != nil {
 		return nil, err
@@ -1093,7 +1111,7 @@ func (n NotificationPostDeleted) view(ctx context.Context, db *sql.DB, format Te
 
 // CreatePostDeletedNotification creates a notification of type "deleted_post".
 // In actuall fact it may be a post or a comment.
-func CreatePostDeletedNotification(ctx context.Context, db *sql.DB, user uid.ID, deletedAs UserGroup, isPost bool, targetID uid.ID) error {
+func CreatePostDeletedNotification(ctx context.Context, db *gorm.DB, user uid.ID, deletedAs UserGroup, isPost bool, targetID uid.ID) error {
 	targetType := "post"
 	if !isPost {
 		targetType = "comment"
@@ -1113,7 +1131,7 @@ type NotificationModAdd struct {
 	AddedBy       string `json:"addedBy"`
 }
 
-func (n NotificationModAdd) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationModAdd) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationModAdd
 	out := struct {
 		T
@@ -1130,7 +1148,7 @@ func (n NotificationModAdd) marshalJSONForAPI(ctx context.Context, db *sql.DB) (
 	return json.Marshal(out)
 }
 
-func (n NotificationModAdd) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationModAdd) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	view := &NotificationView{
 		ToURL: "/" + n.CommunityName,
 		Title: fmt.Sprintf("You are added as a moderator of %s by %s", n.CommunityName, encloseInBold(format, "@"+n.AddedBy)),
@@ -1139,7 +1157,7 @@ func (n NotificationModAdd) view(ctx context.Context, db *sql.DB, format TextFor
 	return view, nil
 }
 
-func CreateNewModAddNotification(ctx context.Context, db *sql.DB, user uid.ID, community, addedBy string) error {
+func CreateNewModAddNotification(ctx context.Context, db *gorm.DB, user uid.ID, community, addedBy string) error {
 	n := NotificationModAdd{
 		CommunityName: community,
 		AddedBy:       addedBy,
@@ -1152,7 +1170,7 @@ type NotificationNewBadge struct {
 	BadgeType string `json:"badgeType"`
 }
 
-func (n NotificationNewBadge) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationNewBadge) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	user, err := GetUser(ctx, db, n.UserID, nil)
 	if err != nil {
 		return nil, err
@@ -1167,7 +1185,7 @@ func (n NotificationNewBadge) marshalJSONForAPI(ctx context.Context, db *sql.DB)
 	return json.Marshal(out)
 }
 
-func (n NotificationNewBadge) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationNewBadge) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	user, err := GetUser(ctx, db, n.UserID, nil)
 	if err != nil {
 		return nil, err
@@ -1179,7 +1197,7 @@ func (n NotificationNewBadge) view(ctx context.Context, db *sql.DB, format TextF
 	}, nil
 }
 
-func CreateNewBadgeNotification(ctx context.Context, db *sql.DB, user uid.ID, badgeType string) error {
+func CreateNewBadgeNotification(ctx context.Context, db *gorm.DB, user uid.ID, badgeType string) error {
 	// Check if badgeType is valid.
 	if _, err := badgeTypeInt(db, badgeType); err != nil {
 		return err
@@ -1195,7 +1213,7 @@ type NotificationWelcome struct {
 	CommunityName string `json:"communityName"`
 }
 
-func (n *NotificationWelcome) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n *NotificationWelcome) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationWelcome
 	out := struct {
 		*T
@@ -1212,7 +1230,7 @@ func (n *NotificationWelcome) marshalJSONForAPI(ctx context.Context, db *sql.DB)
 	return json.Marshal(out)
 }
 
-func (n NotificationWelcome) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationWelcome) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	view := &NotificationView{
 		ToURL: "/" + n.CommunityName,
 		Title: fmt.Sprintf("%s. Make a post in our %s community to say hello!", encloseInBold(format, "Welcome to Discuit"), encloseInBold(format, n.CommunityName)),
@@ -1221,17 +1239,17 @@ func (n NotificationWelcome) view(ctx context.Context, db *sql.DB, format TextFo
 	return view, nil
 }
 
-func createWelcomeNotification(ctx context.Context, db *sql.DB, community string, user uid.ID) error {
+func createWelcomeNotification(ctx context.Context, db *gorm.DB, community string, user uid.ID) error {
 	return CreateNotification(ctx, db, user, NotificationTypeWelcome, &NotificationWelcome{
 		CommunityName: community,
 	})
 }
 
-func SendWelcomeNotifications(ctx context.Context, db *sql.DB, community string, delay time.Duration) (int, error) {
+func SendWelcomeNotifications(ctx context.Context, db *gorm.DB, community string, delay time.Duration) (int, error) {
 	// Check if the community exists
 	{
 		var tmp string
-		if err := db.QueryRowContext(ctx, "SELECT name_lc FROM communities WHERE name_lc = ?", strings.ToLower(community)).Scan(&tmp); err != nil {
+		if err := msql.QueryRowContext(ctx, db, "SELECT name_lc FROM communities WHERE name_lc = ?", strings.ToLower(community)).Scan(&tmp); err != nil {
 			if err == sql.ErrNoRows {
 				return 0, fmt.Errorf("welcome community '%s' doesn't exist", community)
 			}
@@ -1239,7 +1257,7 @@ func SendWelcomeNotifications(ctx context.Context, db *sql.DB, community string,
 		}
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id FROM users WHERE welcome_notification_sent = false AND created_at < ?", time.Now().Add(-1*delay))
+	rows, err := msql.QueryContext(ctx, db, "SELECT id FROM users WHERE welcome_notification_sent = false AND created_at < ?", time.Now().Add(-1*delay))
 	if err != nil {
 		return 0, err
 	}
@@ -1262,7 +1280,7 @@ func SendWelcomeNotifications(ctx context.Context, db *sql.DB, community string,
 		if err := createWelcomeNotification(ctx, db, community, user); err != nil {
 			return fmt.Errorf("failed to send welcome notification: %w", err)
 		}
-		_, err := db.ExecContext(ctx, "update users set welcome_notification_sent = true where id = ?", user)
+		_, err := msql.ExecContext(ctx, db, "update users set welcome_notification_sent = true where id = ?", user)
 		return err
 	}
 
@@ -1281,7 +1299,7 @@ type NotificationDeniedComm struct {
 	Body string `json:"body"`
 }
 
-func (n NotificationDeniedComm) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n NotificationDeniedComm) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	out := struct {
 		Body string `json:"body"`
 	}{
@@ -1290,7 +1308,7 @@ func (n NotificationDeniedComm) marshalJSONForAPI(ctx context.Context, db *sql.D
 	return json.Marshal(out)
 }
 
-func (n NotificationDeniedComm) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationDeniedComm) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	view := &NotificationView{
 		Title: n.Body,
 		ToURL: "#",
@@ -1299,7 +1317,7 @@ func (n NotificationDeniedComm) view(ctx context.Context, db *sql.DB, format Tex
 	return view, nil
 }
 
-func CreateDeniedCommNotification(ctx context.Context, db *sql.DB, user uid.ID, body string) error {
+func CreateDeniedCommNotification(ctx context.Context, db *gorm.DB, user uid.ID, body string) error {
 	// if body is somehow an empty string, populate with generic denial text
 	if body == "" {
 		body = "Your community creation request was denied. Please contact the admin team for more details."
@@ -1314,7 +1332,7 @@ type NotificationAnnouncement struct {
 	PostID uid.ID `json:"postId"`
 }
 
-func (n *NotificationAnnouncement) marshalJSONForAPI(ctx context.Context, db *sql.DB) ([]byte, error) {
+func (n *NotificationAnnouncement) marshalJSONForAPI(ctx context.Context, db *gorm.DB) ([]byte, error) {
 	type T NotificationAnnouncement
 	out := struct {
 		T
@@ -1336,7 +1354,7 @@ func (n *NotificationAnnouncement) marshalJSONForAPI(ctx context.Context, db *sq
 	return json.Marshal(out)
 }
 
-func (n NotificationAnnouncement) view(ctx context.Context, db *sql.DB, format TextFormat) (*NotificationView, error) {
+func (n NotificationAnnouncement) view(ctx context.Context, db *gorm.DB, format TextFormat) (*NotificationView, error) {
 	post, err := GetPost(ctx, db, &n.PostID, "", nil, true)
 	if err != nil {
 		return nil, err
@@ -1353,7 +1371,7 @@ func (n NotificationAnnouncement) view(ctx context.Context, db *sql.DB, format T
 // notification of post to one user. If the user has more than one announcement
 // post already when this function is called, all those notifications except one
 // are deleted.
-func createAnnouncementNotification(ctx context.Context, db *sql.DB, post, receiver uid.ID) error {
+func createAnnouncementNotification(ctx context.Context, db *gorm.DB, post, receiver uid.ID) error {
 	// Select last 10 notifications to see if an identical notification exists.
 	notifs, _, err := GetNotifications(ctx, db, receiver, 10, "", false, "")
 	if err != nil {
@@ -1385,20 +1403,20 @@ func createAnnouncementNotification(ctx context.Context, db *sql.DB, post, recei
 // every user account (except for the deleted and banned ones). This is an
 // expensive function that might take many seconds or minutes, depending on the
 // size of the userbase, to turn.
-func sendAnnouncementNotifications(ctx context.Context, db *sql.DB, post uid.ID) error {
+func sendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID) error {
 	users, err := GetAllUserIDs(ctx, db, false, false)
 	if err != nil {
 		return nil
 	}
 
-	if _, err := db.ExecContext(ctx, "UPDATE announcement_posts SET sending_started_at = ? WHERE post_id = ?", time.Now(), post); err != nil {
+	if _, err := msql.ExecContext(ctx, db, "UPDATE announcement_posts SET sending_started_at = ? WHERE post_id = ?", time.Now(), post); err != nil {
 		return err
 	}
 
 	sent := 0
 	for _, user := range users {
 		var rowID int
-		if err := db.QueryRowContext(ctx, "SELECT id FROM announcement_notifications_sent WHERE post_id = ? AND user_id = ?", post, user).Scan(&rowID); err != nil {
+		if err := msql.QueryRowContext(ctx, db, "SELECT id FROM announcement_notifications_sent WHERE post_id = ? AND user_id = ?", post, user).Scan(&rowID); err != nil {
 			if err != sql.ErrNoRows {
 				return err
 			}
@@ -1408,7 +1426,7 @@ func sendAnnouncementNotifications(ctx context.Context, db *sql.DB, post uid.ID)
 			continue
 		}
 
-		if _, err := db.ExecContext(ctx, "INSERT INTO announcement_notifications_sent (post_id, user_id) VALUES (?, ?)", post, user); err != nil {
+		if _, err := msql.ExecContext(ctx, db, "INSERT INTO announcement_notifications_sent (post_id, user_id) VALUES (?, ?)", post, user); err != nil {
 			return err
 		}
 
@@ -1420,16 +1438,16 @@ func sendAnnouncementNotifications(ctx context.Context, db *sql.DB, post uid.ID)
 		sent++
 		if sent%50 == 0 {
 			// For every 50 notifs sent update the total_sent count.
-			db.ExecContext(ctx, "UPDATE announcement_posts SET total_sent = ? WHERE post_id = ?", sent, post)
+			msql.ExecContext(ctx, db, "UPDATE announcement_posts SET total_sent = ? WHERE post_id = ?", sent, post)
 		}
 	}
 
 	totalSent := 0
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM announcement_notifications_sent WHERE post_id = ?", post).Scan(&totalSent); err != nil {
+	if err := msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM announcement_notifications_sent WHERE post_id = ?", post).Scan(&totalSent); err != nil {
 		return err
 	}
 
-	if _, err := db.ExecContext(ctx, "UPDATE announcement_posts SET sending_finished_at = ?, total_sent = ? WHERE post_id = ?", time.Now(), totalSent, post); err != nil {
+	if _, err := msql.ExecContext(ctx, db, "UPDATE announcement_posts SET sending_finished_at = ?, total_sent = ? WHERE post_id = ?", time.Now(), totalSent, post); err != nil {
 		return err
 	}
 
@@ -1441,8 +1459,8 @@ func sendAnnouncementNotifications(ctx context.Context, db *sql.DB, post uid.ID)
 // function can take many seconds to minutes to run, the provided context should
 // not be one that expires quickly (such as a context gotten from
 // [http.Request]).
-func SendAnnouncementNotifications(ctx context.Context, db *sql.DB, post uid.ID) error {
-	rows, err := db.QueryContext(ctx, "SELECT post_id FROM announcement_posts WHERE sending_finished_at IS NULL")
+func SendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID) error {
+	rows, err := msql.QueryContext(ctx, db, "SELECT post_id FROM announcement_posts WHERE sending_finished_at IS NULL")
 	if err != nil {
 		return err
 	}

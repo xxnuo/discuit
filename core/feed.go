@@ -12,6 +12,7 @@ import (
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
+	"gorm.io/gorm"
 )
 
 // FeedSort represents how the items in a feed are to be sorted.
@@ -199,8 +200,8 @@ func NextPointsIDCursor(text string) (p int, id *uid.ID, err error) {
 	return
 }
 
-func homeFeedWhereClause(ctx context.Context, db *sql.DB, user uid.ID, where string, args []any) (string, []any, error) {
-	rows, err := db.QueryContext(ctx, "SELECT community_members.community_id FROM community_members WHERE community_members.user_id = ?", user)
+func homeFeedWhereClause(ctx context.Context, db *gorm.DB, user uid.ID, where string, args []any) (string, []any, error) {
+	rows, err := msql.QueryContext(ctx, db, "SELECT community_members.community_id FROM community_members WHERE community_members.user_id = ?", user)
 	if err != nil {
 		return where, args, err
 	}
@@ -239,8 +240,8 @@ func homeFeedWhereClause(ctx context.Context, db *sql.DB, user uid.ID, where str
 	return where, args, nil
 }
 
-func moderatingFeedWhereClause(ctx context.Context, db *sql.DB, user uid.ID, where string, args []any) (string, []any, error) {
-	rows, err := db.QueryContext(ctx, "SELECT community_mods.community_id FROM community_mods WHERE community_mods.user_id = ?", user)
+func moderatingFeedWhereClause(ctx context.Context, db *gorm.DB, user uid.ID, where string, args []any) (string, []any, error) {
+	rows, err := msql.QueryContext(ctx, db, "SELECT community_mods.community_id FROM community_mods WHERE community_mods.user_id = ?", user)
 	if err != nil {
 		return where, args, err
 	}
@@ -326,7 +327,7 @@ func (o *FeedOptions) nextInt64() (i int64, err error) {
 	return
 }
 
-func GetFeed(ctx context.Context, db *sql.DB, opts *FeedOptions) (_ *FeedResultSet, err error) {
+func GetFeed(ctx context.Context, db *gorm.DB, opts *FeedOptions) (_ *FeedResultSet, err error) {
 	if !opts.Sort.Valid() {
 		return nil, ErrInvalidFeedSort
 	}
@@ -353,7 +354,7 @@ func GetFeed(ctx context.Context, db *sql.DB, opts *FeedOptions) (_ *FeedResultS
 
 // getPostsLatest returns site wide latest posts, if opts.Community is nil, or
 // latest posts in opts.Community, if not.
-func getPostsLatest(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResultSet, error) {
+func getPostsLatest(ctx context.Context, db *gorm.DB, opts *FeedOptions) (*FeedResultSet, error) {
 	var args []any
 	loggedIn := opts.Viewer != nil
 
@@ -396,7 +397,7 @@ func getPostsLatest(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedRe
 	var rows *sql.Rows
 	var err error
 	args = append(args, opts.Limit+1)
-	rows, err = db.QueryContext(ctx, query, args...)
+	rows, err = msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +446,7 @@ func scanIDs(rows *sql.Rows) ([]uid.ID, error) {
 
 // mergePinnedPosts fetches site-wide pinned posts, if community is nil, or
 // community-wide pinned posts, if not, and merges them to rs.
-func mergePinnedPosts(ctx context.Context, db *sql.DB, viewer, community *uid.ID, next string, rs *FeedResultSet) (*FeedResultSet, error) {
+func mergePinnedPosts(ctx context.Context, db *gorm.DB, viewer, community *uid.ID, next string, rs *FeedResultSet) (*FeedResultSet, error) {
 	if next != "" {
 		return rs, nil
 	}
@@ -494,7 +495,7 @@ func whereMutedAndHidden(where, postsTable string, args []any, viewer uid.ID, mu
 
 // getPostsHot returns site wide hot posts, if opts.Community is nil, or hot
 // posts in opts.Community, if not.
-func getPostsHot(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResultSet, error) {
+func getPostsHot(ctx context.Context, db *gorm.DB, opts *FeedOptions) (*FeedResultSet, error) {
 	var args []any
 	loggedIn := opts.Viewer != nil
 
@@ -539,7 +540,7 @@ func getPostsHot(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResul
 	var rows *sql.Rows
 	var err error
 	args = append(args, opts.Limit+1)
-	rows, err = db.QueryContext(ctx, query, args...)
+	rows, err = msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -556,7 +557,7 @@ func getPostsHot(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResul
 
 // getPostsTopAll returns site wide all time top posts, if opts.Community is
 // nil, or all time top posts in opts.Community, if not.
-func getPostsTopAll(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResultSet, error) {
+func getPostsTopAll(ctx context.Context, db *gorm.DB, opts *FeedOptions) (*FeedResultSet, error) {
 	loggedIn := opts.Viewer != nil
 	var args []any
 	if loggedIn {
@@ -599,7 +600,7 @@ func getPostsTopAll(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedRe
 	args = append(args, opts.Limit+1)
 	query := buildSelectPostQuery(loggedIn, where)
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +618,7 @@ func getPostsTopAll(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedRe
 // getPostsTop returns site wide top posts (daily, weekly, etc), if
 // opts.Community is nil, or top posts (daily, weekly, etc) in opts.Community,
 // if not.
-func getPostsTop(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResultSet, error) {
+func getPostsTop(ctx context.Context, db *gorm.DB, opts *FeedOptions) (*FeedResultSet, error) {
 	if opts.Sort == FeedSortTopAll {
 		return getPostsTopAll(ctx, db, opts)
 	}
@@ -666,7 +667,7 @@ func getPostsTop(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResul
 	query += where + "ORDER BY points DESC, post_id DESC LIMIT ?"
 	args = append(args, opts.Limit+1)
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +690,7 @@ func getPostsTop(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResul
 
 // getPostsActivity returns site wide posts sorted by activity, if
 // opts.Community is nil, or community-wide posts sorted by activity, if not.
-func getPostsActivity(ctx context.Context, db *sql.DB, opts *FeedOptions) (*FeedResultSet, error) {
+func getPostsActivity(ctx context.Context, db *gorm.DB, opts *FeedOptions) (*FeedResultSet, error) {
 	var args []interface{}
 	loggedIn := opts.Viewer != nil
 
@@ -735,7 +736,7 @@ func getPostsActivity(ctx context.Context, db *sql.DB, opts *FeedOptions) (*Feed
 	var rows *sql.Rows
 	var err error
 	args = append(args, opts.Limit+1)
-	rows, err = db.QueryContext(ctx, query, args...)
+	rows, err = msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -751,7 +752,7 @@ func getPostsActivity(ctx context.Context, db *sql.DB, opts *FeedOptions) (*Feed
 }
 
 // getPostsList returns a slice of posts that are ordered by points.
-func getPostsList(ctx context.Context, db *sql.DB, viewer *uid.ID, ids ...uid.ID) ([]*Post, error) {
+func getPostsList(ctx context.Context, db *gorm.DB, viewer *uid.ID, ids ...uid.ID) ([]*Post, error) {
 	loggedIn := viewer != nil
 	where := fmt.Sprintf("WHERE posts.id IN %s ORDER BY posts.points DESC, posts.id DESC", msql.InClauseQuestionMarks(len(ids)))
 	query := buildSelectPostQuery(loggedIn, where)
@@ -764,7 +765,7 @@ func getPostsList(ctx context.Context, db *sql.DB, viewer *uid.ID, ids ...uid.ID
 		args = append(args, id)
 	}
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -773,15 +774,15 @@ func getPostsList(ctx context.Context, db *sql.DB, viewer *uid.ID, ids ...uid.ID
 
 // GetPostsDeleted returns a slice of deleted posts (sorted by ID) and the
 // number of deleted posts in community.
-func GetPostsDeleted(ctx context.Context, db *sql.DB, community uid.ID, limit, page int) (int, []*Post, error) {
+func GetPostsDeleted(ctx context.Context, db *gorm.DB, community uid.ID, limit, page int) (int, []*Post, error) {
 	count := 0
-	row := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM posts WHERE community_id = ? AND posts.deleted = TRUE", community)
+	row := msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM posts WHERE community_id = ? AND posts.deleted = TRUE", community)
 	if err := row.Scan(&count); err != nil {
 		return 0, nil, err
 	}
 
 	query := buildSelectPostQuery(false, "WHERE community_id = ? AND posts.deleted = TRUE ORDER BY communities.id DESC LIMIT ? OFFSET ?")
-	rows, err := db.QueryContext(ctx, query, community, limit, limit*(page-1))
+	rows, err := msql.QueryContext(ctx, db, query, community, limit, limit*(page-1))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -795,15 +796,15 @@ func GetPostsDeleted(ctx context.Context, db *sql.DB, community uid.ID, limit, p
 
 // GetPostsLocked returns a slice of locked posts (sorted by ID) and the number
 // of locked posts in community.
-func GetPostsLocked(ctx context.Context, db *sql.DB, community uid.ID, limit, page int) (int, []*Post, error) {
+func GetPostsLocked(ctx context.Context, db *gorm.DB, community uid.ID, limit, page int) (int, []*Post, error) {
 	count := 0
-	row := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM posts WHERE community_id = ? AND posts.deleted = FALSE AND locked = TRUE", community)
+	row := msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM posts WHERE community_id = ? AND posts.deleted = FALSE AND locked = TRUE", community)
 	if err := row.Scan(&count); err != nil {
 		return 0, nil, err
 	}
 
 	query := buildSelectPostQuery(false, "WHERE community_id = ? AND posts.deleted = FALSE AND locked = TRUE ORDER BY communities.id DESC LIMIT ? OFFSET ?")
-	rows, err := db.QueryContext(ctx, query, community, limit, limit*(page-1))
+	rows, err := msql.QueryContext(ctx, db, query, community, limit, limit*(page-1))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -829,7 +830,7 @@ type UserFeedResultSet struct {
 	Next  *uid.ID        `json:"next"`
 }
 
-func GetUserFeed(ctx context.Context, db *sql.DB, viewer *uid.ID, userID uid.ID, filter string, limit int, next *uid.ID) (*UserFeedResultSet, error) {
+func GetUserFeed(ctx context.Context, db *gorm.DB, viewer *uid.ID, userID uid.ID, filter string, limit int, next *uid.ID) (*UserFeedResultSet, error) {
 	if !(filter == "posts" || filter == "comments" || filter == "") {
 		return nil, httperr.NewBadRequest("invalid-filter", "filter must be one of 'posts' or 'comments' or it must be empty")
 	}
@@ -862,7 +863,7 @@ func GetUserFeed(ctx context.Context, db *sql.DB, viewer *uid.ID, userID uid.ID,
 	query += "ORDER BY target_id DESC LIMIT ?"
 	args = append(args, limit+1)
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -937,7 +938,7 @@ func GetUserFeed(ctx context.Context, db *sql.DB, viewer *uid.ID, userID uid.ID,
 	return set, nil
 }
 
-func getCommentsPostTitles(ctx context.Context, db *sql.DB, comments []*Comment, viewer *uid.ID) error {
+func getCommentsPostTitles(ctx context.Context, db *gorm.DB, comments []*Comment, viewer *uid.ID) error {
 	postIDs := make([]uid.ID, len(comments))
 	postTitles := make(map[uid.ID]string, len(comments))
 	for i, comment := range comments {

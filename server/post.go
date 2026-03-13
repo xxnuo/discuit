@@ -12,6 +12,7 @@ import (
 	"github.com/discuitnet/discuit/core"
 	"github.com/discuitnet/discuit/internal/httperr"
 	"github.com/discuitnet/discuit/internal/images"
+	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/discuitnet/discuit/internal/utils"
 )
@@ -374,7 +375,7 @@ func (s *Server) updateImage(w *responseWriter, r *request) error {
 	// Check if viewer is the original uploader
 	if !allowed {
 		var postAuthorCheck int
-		err := s.db.QueryRowContext(r.ctx,
+		err := msql.QueryRowContext(r.ctx, s.db,
 			"SELECT 1 FROM posts p JOIN post_images pi ON p.id = pi.post_id WHERE pi.image_id = ? AND p.user_id = ? LIMIT 1",
 			imageID, viewerID).Scan(&postAuthorCheck)
 		if err == nil {
@@ -387,7 +388,7 @@ func (s *Server) updateImage(w *responseWriter, r *request) error {
 	// Check if viewer is the original uploader of the image
 	if !allowed {
 		var tempUploaderCheck int
-		err := s.db.QueryRowContext(r.ctx, "SELECT 1 FROM temp_images WHERE image_id = ? AND user_id = ? LIMIT 1", imageID, viewerID).Scan(&tempUploaderCheck)
+		err := msql.QueryRowContext(r.ctx, s.db, "SELECT 1 FROM temp_images WHERE image_id = ? AND user_id = ? LIMIT 1", imageID, viewerID).Scan(&tempUploaderCheck)
 		if err == nil {
 			allowed = true
 		} else if err != sql.ErrNoRows {
@@ -398,7 +399,7 @@ func (s *Server) updateImage(w *responseWriter, r *request) error {
 	// Check if viewer is the profile picture owner
 	if !allowed {
 		var userProPicOwnerCheck int
-		err := s.db.QueryRowContext(r.ctx, "SELECT 1 FROM users WHERE pro_pic = ? AND id = ? LIMIT 1", imageID, viewerID).Scan(&userProPicOwnerCheck)
+		err := msql.QueryRowContext(r.ctx, s.db, "SELECT 1 FROM users WHERE pro_pic = ? AND id = ? LIMIT 1", imageID, viewerID).Scan(&userProPicOwnerCheck)
 		if err == nil {
 			allowed = true
 		} else if err != sql.ErrNoRows {
@@ -411,7 +412,7 @@ func (s *Server) updateImage(w *responseWriter, r *request) error {
 		var communityID uid.ID
 
 		// check if the image is used as a pro_pic or banner
-		err := s.db.QueryRowContext(r.ctx, "SELECT id FROM communities WHERE (pro_pic_2 = ? OR banner_image_2 = ?) LIMIT 1", imageID, imageID).Scan(&communityID)
+		err := msql.QueryRowContext(r.ctx, s.db, "SELECT id FROM communities WHERE (pro_pic_2 = ? OR banner_image_2 = ?) LIMIT 1", imageID, imageID).Scan(&communityID)
 		if err == nil {
 			isModOrAdmin, modCheckErr := core.UserModOrAdmin(r.ctx, s.db, communityID, viewerID)
 			if modCheckErr != nil {
@@ -429,7 +430,7 @@ func (s *Server) updateImage(w *responseWriter, r *request) error {
 	}
 
 	altText := utils.TruncateUnicodeString(body.AltText, 1024)
-	_, err = s.db.ExecContext(r.ctx, "UPDATE images SET alt_text = ? WHERE id = ?", altText, imageID)
+	_, err = msql.ExecContext(r.ctx, s.db, "UPDATE images SET alt_text = ? WHERE id = ?", altText, imageID)
 	if err != nil {
 		return fmt.Errorf("failed to update alt text in db: %w", err)
 	}

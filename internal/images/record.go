@@ -9,13 +9,14 @@ import (
 
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
+	"gorm.io/gorm"
 )
 
 // ImageRecord is a database row of an image item.
 //
 // Table name: images.
 type ImageRecord struct {
-	db *sql.DB
+	db *gorm.DB
 
 	ID uid.ID `json:"id"`
 
@@ -77,7 +78,7 @@ func (r *ImageRecord) ScanDestinations() []any {
 
 // GetImageRecords returns a slice of image records. If no images were found it
 // returns ErrImageNotFound.
-func GetImageRecords(ctx context.Context, db *sql.DB, ids ...uid.ID) ([]*ImageRecord, error) {
+func GetImageRecords(ctx context.Context, db *gorm.DB, ids ...uid.ID) ([]*ImageRecord, error) {
 	query := msql.BuildSelectQuery("images", imageRecordSelectColumns, nil, "WHERE id IN "+msql.InClauseQuestionMarks(len(ids)))
 
 	args := make([]any, len(ids))
@@ -85,7 +86,7 @@ func GetImageRecords(ctx context.Context, db *sql.DB, ids ...uid.ID) ([]*ImageRe
 		args[i] = ids[i]
 	}
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := msql.QueryContext(ctx, db, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +103,7 @@ func GetImageRecords(ctx context.Context, db *sql.DB, ids ...uid.ID) ([]*ImageRe
 
 // GetImageRecords returns an image record. If no image was found it returns
 // ErrImageNotFound.
-func GetImageRecord(ctx context.Context, db *sql.DB, id uid.ID) (*ImageRecord, error) {
+func GetImageRecord(ctx context.Context, db *gorm.DB, id uid.ID) (*ImageRecord, error) {
 	records, err := GetImageRecords(ctx, db, id)
 	if err != nil {
 		return nil, err
@@ -110,7 +111,7 @@ func GetImageRecord(ctx context.Context, db *sql.DB, id uid.ID) (*ImageRecord, e
 	return records[0], nil
 }
 
-func scanImageRecords(db *sql.DB, rows *sql.Rows) ([]*ImageRecord, error) {
+func scanImageRecords(db *gorm.DB, rows *sql.Rows) ([]*ImageRecord, error) {
 	defer rows.Close()
 
 	var records []*ImageRecord

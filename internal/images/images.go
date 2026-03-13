@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/binary"
@@ -34,6 +33,7 @@ import (
 
 	// Register webp decoding for images pkg.
 	_ "golang.org/x/image/webp"
+	"gorm.io/gorm"
 )
 
 var (
@@ -541,7 +541,7 @@ func ClearCache() error {
 // getImage returns an image (after optionally transforming it) as per the
 // options in r. Make sure to check whether the request has a valid signature by
 // calling r.Valid before calling this function.
-func getImage(ctx context.Context, db *sql.DB, r *request, cacheEnabled bool) ([]byte, error) {
+func getImage(ctx context.Context, db *gorm.DB, r *request, cacheEnabled bool) ([]byte, error) {
 	if cacheEnabled {
 		if image, err := getCachedImage(r); err != nil {
 			if !os.IsNotExist(err) {
@@ -757,21 +757,21 @@ type ImageOptions struct {
 // SaveImage saves the provided image in the image store with the name storeName
 // and creates a row in the images table. The argument opts can be nil, in which
 // case default values are used.
-func SaveImage(ctx context.Context, db *sql.DB, storeName string, file []byte, opts *ImageOptions) (*ImageRecord, error) {
-	tx, err := db.BeginTx(ctx, nil)
+func SaveImage(ctx context.Context, db *gorm.DB, storeName string, file []byte, opts *ImageOptions) (*ImageRecord, error) {
+	tx, err := msql.BeginTx(ctx, db)
 	if err != nil {
 		return nil, nil
 	}
 
 	id, err := SaveImageTx(ctx, tx, storeName, file, opts)
 	if err != nil {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback().Error; err != nil {
 			log.Println("images.SaveImage rollback error: ", err)
 		}
 		return nil, err
 	}
 
-	if err = tx.Commit(); err != nil {
+	if err = tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
@@ -783,7 +783,7 @@ func SaveImage(ctx context.Context, db *sql.DB, storeName string, file []byte, o
 // storing (and leaking) image metadata.
 var SkipProcessing = false
 
-func SaveImageTx(ctx context.Context, tx *sql.Tx, storeName string, file []byte, opts *ImageOptions) (uid.ID, error) {
+func SaveImageTx(ctx context.Context, tx *gorm.DB, storeName string, file []byte, opts *ImageOptions) (uid.ID, error) {
 	if opts == nil {
 		opts = &ImageOptions{
 			Format: ImageFormatJPEG,
@@ -846,7 +846,7 @@ func SaveImageTx(ctx context.Context, tx *sql.Tx, storeName string, file []byte,
 		{Name: "average_color", Value: averageColor},
 	})
 
-	if _, err = tx.ExecContext(ctx, query, args...); err != nil {
+	if _, err = msql.ExecContext(ctx, tx, query, args...); err != nil {
 		return uid.ID{}, err
 	}
 
@@ -861,7 +861,7 @@ func SaveImageTx(ctx context.Context, tx *sql.Tx, storeName string, file []byte,
 	return id, nil
 }
 
-func DeleteImagesTx(ctx context.Context, tx *sql.Tx, db *sql.DB, images ...uid.ID) error {
+func DeleteImagesTx(ctx context.Context, tx *gorm.DB, db *gorm.DB, images ...uid.ID) error {
 	records, err := GetImageRecords(ctx, db, images...)
 	if err != nil {
 		return err
@@ -885,7 +885,7 @@ func DeleteImagesTx(ctx context.Context, tx *sql.Tx, db *sql.DB, images ...uid.I
 		args[i] = images[i]
 	}
 
-	_, err = tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM images WHERE id IN %s", msql.InClauseQuestionMarks(len(images))), args...)
+	_, err = msql.ExecContext(ctx, tx, fmt.Sprintf("DELETE FROM images WHERE id IN %s", msql.InClauseQuestionMarks(len(images))), args...)
 	return err
 }
 

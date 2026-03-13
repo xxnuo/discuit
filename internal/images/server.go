@@ -1,10 +1,11 @@
 package images
 
 import (
-	"database/sql"
 	"io"
 	"log"
 	"net/http"
+
+	"gorm.io/gorm"
 )
 
 // Server implements the http.Handler interface.
@@ -12,7 +13,7 @@ import (
 // Set HMACKey and FullImageURL before this server is started.
 type Server struct {
 	SkipHashCheck bool
-	DB            *sql.DB
+	DB            *gorm.DB
 	CacheDisabled bool
 
 	// If enabled, CORS headers will be set for all responses from this server,

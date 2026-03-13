@@ -33,6 +33,9 @@
           ];
 
           shellHook = ''
+            export DISCUIT_DB_DRIVER=sqlite3
+            export DISCUIT_DB_DSN=$PWD/discuit.db
+
             # start mariadb
             export MYSQL_UNIX_PORT=$PWD/.mysql/mysql.sock
             export MYSQL_TCP_PORT=3306
@@ -74,6 +77,8 @@
 
             echo ""
             echo -e "\033[1;32m✓ Environment ready for discuit development!\033[0m"
+            echo -e "\033[1;34m  • db driver\033[0m       : \033[0;36m$DISCUIT_DB_DRIVER\033[0m"
+            echo -e "\033[1;34m  • db dsn\033[0m          : \033[0;36m$DISCUIT_DB_DSN\033[0m"
             echo -e "\033[1;34m  • mariadb socket\033[0m : \033[0;36m$MYSQL_UNIX_PORT\033[0m"
             echo -e "\033[1;34m  • mariadb logs\033[0m   : \033[0;36m.mysql/mysql.log\033[0m"
             echo -e "\033[1;34m  • redis logs\033[0m     : \033[0;36m.redis/redis.log\033[0m"

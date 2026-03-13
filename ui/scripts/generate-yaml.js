@@ -1,29 +1,29 @@
-import { exec } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { promisify } from 'node:util';
+import { execFile } from 'node:child_process';
+import { access, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// Get the root path
-const rootPath = path.join(import.meta.dirname, '../../');
+const execFileAsync = promisify(execFile);
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const rootPath = path.resolve(scriptDir, '../..');
+const discuitBin = path.join(rootPath, 'discuit');
 
-// Run the command to get the config
-(async () => {
-  await exec('./discuit inject-config', { cwd: '../' }, async (error, stdout, stderr) => {
-    if (error) {
-      console.error(`exec error: ${error}`);
-      return;
-    }
-    if (stderr) {
-      console.error(`stderr: ${stderr}`);
-      return;
-    }
+let command = discuitBin;
+let args = ['inject-config'];
 
-    // Make ui-config.yaml
-    await fs.writeFile(path.join(rootPath, 'ui-config.yaml'), stdout, (err) => {
-      if (err) {
-        console.error(err);
-      } else {
-        console.log('ui-config.yaml has been written');
-      }
-    });
-  });
-})();
+try {
+  await access(discuitBin);
+} catch {
+  command = 'go';
+  args = ['run', '.', 'inject-config'];
+}
+
+const { stdout, stderr } = await execFileAsync(command, args, { cwd: rootPath });
+
+if (stderr) {
+  throw new Error(stderr);
+}
+
+await writeFile(path.join(rootPath, 'ui-config.yaml'), stdout);
+console.log('ui-config.yaml has been written');

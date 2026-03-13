@@ -6,18 +6,15 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
+	dbx "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/images"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/discuitnet/discuit/program"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
-
-	_ "github.com/golang-migrate/migrate/v4/database/mysql"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func RunCLI() {
@@ -363,26 +360,13 @@ var CommandMigrate = &cli.Command{
 	Subcommands: []*cli.Command{
 		{
 			Name:  "new",
-			Usage: "Create a new pair of migrations files",
+			Usage: "Create a new migration file",
 			Action: func(ctx *cli.Context) error {
-				folder, err := os.Open("./migrations/")
-				if err != nil {
-					return err
-				}
-				files, err := folder.Readdirnames(0)
-				if err != nil {
-					return err
-				}
-				sort.Strings(files)
-
-				last := files[len(files)-1]
-				n := strings.Index(last, "_")
-				if n < 0 {
-					return errors.New("no underscore found in last filename")
-				}
-				lastVersion, err := strconv.Atoi(last[0:n])
-				if err != nil {
-					return err
+				lastVersion := 0
+				for _, migration := range dbx.RegisteredMigrations() {
+					if migration.Version > lastVersion {
+						lastVersion = migration.Version
+					}
 				}
 
 				scanner := bufio.NewScanner(os.Stdin)
@@ -396,16 +380,31 @@ var CommandMigrate = &cli.Command{
 				for i := len(newVersion); i < 4; i++ {
 					newVersion = "0" + newVersion
 				}
-				name = newVersion + "_" + strings.ToLower(strings.ReplaceAll(name, " ", "_"))
-				newFiles := []string{name + ".down.sql", name + ".up.sql"}
-				for _, name := range newFiles {
-					file, err := os.Create("./migrations/" + name)
-					if err != nil {
-						return err
-					}
-					if err := file.Close(); err != nil {
-						return err
-					}
+				slug := strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+				filename := "./internal/db/migration_" + newVersion + "_" + slug + ".go"
+				content := fmt.Sprintf(`package db
+
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
+
+func init() {
+	registerMigration(Migration{
+		Version: %d,
+		Name:    %q,
+		Up: func(ctx context.Context, db *gorm.DB) error {
+			return nil
+		},
+		Down: func(ctx context.Context, db *gorm.DB) error {
+			return nil
+		},
+	})
+}
+`, lastVersion+1, slug)
+				if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+					return err
 				}
 				fmt.Print("Created migration!")
 				return nil

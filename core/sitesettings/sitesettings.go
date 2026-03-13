@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+
+	msql "github.com/discuitnet/discuit/internal/sql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var cache = &ssCache{}
@@ -23,7 +27,7 @@ type SiteSettings struct {
 }
 
 // Save persists s to the database.
-func (s *SiteSettings) Save(ctx context.Context, db *sql.DB) error {
+func (s *SiteSettings) Save(ctx context.Context, db *gorm.DB) error {
 	defer cache.bust()
 
 	bytes, err := json.Marshal(s)
@@ -31,8 +35,17 @@ func (s *SiteSettings) Save(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	_, err = db.ExecContext(ctx, "INSERT INTO application_data (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = ?", "site_settings", string(bytes), string(bytes))
-	return err
+	return db.WithContext(ctx).
+		Table("application_data").
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key"}},
+			DoUpdates: clause.Assignments(map[string]any{"value": string(bytes)}),
+		}).
+		Create(map[string]any{
+			"key":   "site_settings",
+			"value": string(bytes),
+		}).
+		Error
 }
 
 type ssCache struct {
@@ -68,13 +81,13 @@ func (c *ssCache) bust() {
 // GetSiteSettings retrieves the site settings (of the admin dashboard) from the
 // database. If the data is not found in the database (as the case may be if
 // they were never altered), then the default settings object is returned.
-func GetSiteSettings(ctx context.Context, db *sql.DB) (*SiteSettings, error) {
+func GetSiteSettings(ctx context.Context, db *gorm.DB) (*SiteSettings, error) {
 	if settings := cache.get(); settings != nil {
 		return settings, nil
 	}
 
 	var jsonText string
-	err := db.QueryRowContext(ctx, "SELECT `value` FROM application_data WHERE `key` = ?", "site_settings").Scan(&jsonText)
+	err := msql.QueryRowContext(ctx, db, "SELECT `value` FROM application_data WHERE `key` = ?", "site_settings").Scan(&jsonText)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return nil, fmt.Errorf("error reading site_settings from db: %w", err)
