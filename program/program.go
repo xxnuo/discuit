@@ -456,7 +456,11 @@ func (pg *Program) ChangeUserPassword(user, password string) error {
 	if err != nil {
 		return err
 	}
-	if err = pg.db.Exec("UPDATE users SET password = ? WHERE id = ?", pass, theuser.ID).Error; err != nil {
+	if err = pg.db.WithContext(pg.ctx).
+		Model(&dbx.User{}).
+		Where("id = ?", theuser.ID).
+		Update("password", string(pass)).
+		Error; err != nil {
 		return err
 	}
 

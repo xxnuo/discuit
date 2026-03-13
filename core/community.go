@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	"github.com/discuitnet/discuit/internal/images"
 	msql "github.com/discuitnet/discuit/internal/sql"
@@ -375,8 +376,33 @@ func GetCommunities(ctx context.Context, db *gorm.DB, sort CommunitiesSort, set 
 // GetCommunitiesPrefix returns all communities with name prefix s sorted by created at.
 func GetCommunitiesPrefix(ctx context.Context, db *gorm.DB, s string) ([]*Community, error) {
 	const limit = 10
-	query := buildSelectCommunityQuery("WHERE communities.name LIKE ? AND communities.deleted_at IS NULL LIMIT ?")
-	rows, err := msql.QueryContext(ctx, db, query, "%"+s+"%", limit)
+	cols := []string{
+		"communities.id",
+		"communities.user_id",
+		"communities.name",
+		"communities.name_lc",
+		"communities.nsfw",
+		"communities.about",
+		"communities.no_members",
+		"communities.posts_count",
+		"communities.posting_restricted",
+		"communities.created_at",
+		"communities.deleted_at",
+	}
+	cols = append(cols, images.ImageColumns("pro_pic")...)
+	cols = append(cols, images.ImageColumns("banner")...)
+
+	rows, err := idb.Select(
+		ctx,
+		db,
+		"communities",
+		cols,
+		idb.NewJoin("LEFT JOIN images AS pro_pic ON pro_pic.id = communities.pro_pic_2"),
+		idb.NewJoin("LEFT JOIN images AS banner ON banner.id = communities.banner_image_2"),
+	).
+		Where("communities.name_lc LIKE ? AND communities.deleted_at IS NULL", strings.ToLower(s)+"%").
+		Limit(limit).
+		Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +411,7 @@ func GetCommunitiesPrefix(ctx context.Context, db *gorm.DB, s string) ([]*Commun
 		return nil, err
 	}
 
-	query = buildSelectCommunityQuery("WHERE communities.name = ?")
+	query := buildSelectCommunityQuery("WHERE communities.name = ?")
 	rows, err = msql.QueryContext(ctx, db, query, s)
 	if err != nil {
 		return nil, err

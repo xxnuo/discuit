@@ -2,12 +2,11 @@ package sitesettings
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sync"
 
-	msql "github.com/discuitnet/discuit/internal/sql"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -34,16 +33,16 @@ func (s *SiteSettings) Save(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
+	value := string(bytes)
 
 	return db.WithContext(ctx).
-		Table("application_data").
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "key"}},
 			DoUpdates: clause.Assignments(map[string]any{"value": string(bytes)}),
 		}).
-		Create(map[string]any{
-			"key":   "site_settings",
-			"value": string(bytes),
+		Create(&idb.ApplicationData{
+			Key:   "site_settings",
+			Value: &value,
 		}).
 		Error
 }
@@ -86,15 +85,21 @@ func GetSiteSettings(ctx context.Context, db *gorm.DB) (*SiteSettings, error) {
 		return settings, nil
 	}
 
-	var jsonText string
-	err := msql.QueryRowContext(ctx, db, "SELECT `value` FROM application_data WHERE `key` = ?", "site_settings").Scan(&jsonText)
-	if err != nil {
-		if err != sql.ErrNoRows {
-			return nil, fmt.Errorf("error reading site_settings from db: %w", err)
-		}
+	var record idb.ApplicationData
+	err := db.WithContext(ctx).
+		Select("value").
+		Where("key = ?", "site_settings").
+		Take(&record).
+		Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("error reading site_settings from db: %w", err)
 	}
 
 	settings := &SiteSettings{}
+	jsonText := ""
+	if record.Value != nil {
+		jsonText = *record.Value
+	}
 	if jsonText == "" {
 		// Do nothhing. No row was found in the application_data table. Return
 		// the deafult SiteSettings object.

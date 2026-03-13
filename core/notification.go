@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/SherClockHolmes/webpush-go"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
@@ -67,7 +68,11 @@ func saveVAPIDKeys(ctx context.Context, db *gorm.DB) (*VAPIDKeys, error) {
 		return nil, err
 	}
 
-	if _, err := msql.ExecContext(ctx, db, "INSERT INTO application_data (`key`, `value`) VALUES (?, ?)", vapidKeysDBKey, string(data)); err != nil {
+	value := string(data)
+	if err := db.WithContext(ctx).Create(&idb.ApplicationData{
+		Key:   vapidKeysDBKey,
+		Value: &value,
+	}).Error; err != nil {
 		return nil, err
 	}
 	return pair, nil
@@ -77,13 +82,20 @@ func saveVAPIDKeys(ctx context.Context, db *gorm.DB) (*VAPIDKeys, error) {
 // the Web Push API. If no keys are found in the application_data table in the
 // database, a new key-value pair is generated, saved, and returned.
 func GetApplicationVAPIDKeys(ctx context.Context, db *gorm.DB) (*VAPIDKeys, error) {
-	rawJSON := ""
-	row := msql.QueryRowContext(ctx, db, "SELECT `value` FROM application_data WHERE `key` = ?", vapidKeysDBKey)
-	if err := row.Scan(&rawJSON); err != nil {
-		if err == sql.ErrNoRows {
+	var record idb.ApplicationData
+	if err := db.WithContext(ctx).
+		Select("value").
+		Where("key = ?", vapidKeysDBKey).
+		Take(&record).
+		Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return saveVAPIDKeys(ctx, db)
 		}
 		return nil, err
+	}
+	rawJSON := ""
+	if record.Value != nil {
+		rawJSON = *record.Value
 	}
 
 	pair := &VAPIDKeys{}
@@ -140,22 +152,22 @@ func SaveWebPushSubscription(ctx context.Context, db *gorm.DB, sessionID string,
 //
 // Make sure to call this function before logging out a user.
 func DeleteWebPushSubscription(ctx context.Context, db *gorm.DB, sessionID string) error {
-	_, err := msql.ExecContext(ctx, db, "DELETE FROM web_push_subscriptions WHERE session_id = ?", sessionID)
-	return err
+	return db.WithContext(ctx).
+		Where("session_id = ?", sessionID).
+		Delete(&idb.WebPushSubscription{}).
+		Error
 }
 
 // userWebPushSubscriptions returns all the Web Push Subscriptions of the user.
 func userWebPushSubscriptions(ctx context.Context, db *gorm.DB, user uid.ID) ([]*WebPushSubscription, error) {
-	s := msql.BuildSelectQuery("web_push_subscriptions", []string{
+	rows, err := idb.Select(ctx, db, "web_push_subscriptions", []string{
 		"id",
 		"session_id",
 		"user_id",
 		"push_subscription",
 		"created_at",
 		"updated_at",
-	}, nil, "WHERE user_id = ?")
-
-	rows, err := msql.QueryContext(ctx, db, s, user)
+	}).Where("user_id = ?", user).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +499,7 @@ func removeExcessNotifications(ctx context.Context, db *gorm.DB, user uid.ID) (n
 	}
 
 	if len(ids) > 0 {
-		_, err = msql.ExecContext(ctx, db, "DELETE FROM notifications WHERE id IN "+msql.InClauseQuestionMarks(len(ids)), ids...)
+		err = db.WithContext(ctx).Where("id IN ?", ids).Delete(&idb.Notification{}).Error
 	}
 	n = len(ids)
 	return
@@ -506,15 +518,19 @@ func CreateNotification(ctx context.Context, db *gorm.DB, user uid.ID, Type Noti
 	if err != nil {
 		return err
 	}
-
-	if _, err := msql.ExecContext(ctx, db, "INSERT INTO notifications (user_id, type, notif) VALUES (?, ?, ?)", user, Type, data); err != nil {
+	var notifData idb.JSONMap
+	if err := json.Unmarshal(data, &notifData); err != nil {
 		return err
 	}
-
-	var lastID int
-	if err := msql.QueryRowContext(ctx, db, "SELECT id FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 1", user).Scan(&lastID); err != nil {
+	record := idb.Notification{
+		UserID: idb.UIDFrom(user),
+		Type:   string(Type),
+		Notif:  notifData,
+	}
+	if err := db.WithContext(ctx).Create(&record).Error; err != nil {
 		return err
 	}
+	lastID := int(record.ID)
 
 	if _, err := removeExcessNotifications(ctx, db, user); err != nil { // attempt
 		log.Println("Failed removing excess notifications: ", err)
@@ -544,8 +560,7 @@ func CreateNotification(ctx context.Context, db *gorm.DB, user uid.ID, Type Noti
 }
 
 func GetNotification(ctx context.Context, db *gorm.DB, ID string, render bool, format TextFormat) (*Notification, error) {
-	query := msql.BuildSelectQuery("notifications", selectNotificationCols, nil, "WHERE id = ?")
-	rows, err := msql.QueryContext(ctx, db, query, ID)
+	rows, err := idb.Select(ctx, db, "notifications", selectNotificationCols).Where("id = ?", ID).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -579,25 +594,19 @@ func (n *notificationsPaginationCursor) decode(s string) error {
 // notifications are returned. The string returned is the pagination cursor of
 // the next fetch.
 func GetNotifications(ctx context.Context, db *gorm.DB, user uid.ID, limit int, cursor string, render bool, format TextFormat) ([]*Notification, string, error) {
-	var args []interface{}
-	args = append(args, user)
-	where := "WHERE user_id = ?"
+	query := idb.Select(ctx, db, "notifications", selectNotificationCols).Where("user_id = ?", user)
 	if cursor != "" {
 		o := notificationsPaginationCursor{}
 		if err := o.decode(cursor); err != nil {
 			return nil, "", err
 		}
-		where += " AND seen >= ? AND updated_at <= ?"
-		args = append(args, o.LastSeen, o.LastUpdatedAt)
+		query = query.Where("seen >= ? AND updated_at <= ?", o.LastSeen, o.LastUpdatedAt)
 	}
-	where += " ORDER BY seen ASC, updated_at DESC"
+	query = query.Order("seen ASC").Order("updated_at DESC")
 	if limit > 0 {
-		where += " LIMIT ?"
-		args = append(args, limit+1)
+		query = query.Limit(limit + 1)
 	}
-
-	query := msql.BuildSelectQuery("notifications", selectNotificationCols, nil, where)
-	rows, err := msql.QueryContext(ctx, db, query, args...)
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, "", err
 	}
@@ -619,7 +628,9 @@ func GetNotifications(ctx context.Context, db *gorm.DB, user uid.ID, limit int, 
 
 // NotificationsCount returns the number of notifications of user.
 func NotificationsCount(ctx context.Context, db *gorm.DB, user uid.ID) (n int, err error) {
-	err = msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM notifications WHERE user_id = ?", user).Scan(&n)
+	var count int64
+	err = db.WithContext(ctx).Model(&idb.Notification{}).Where("user_id = ?", user).Count(&count).Error
+	n = int(count)
 	return
 }
 
@@ -632,7 +643,14 @@ func (n *Notification) Saw(ctx context.Context, seen bool) error {
 		t = &now
 	}
 
-	if _, err := msql.ExecContext(ctx, n.db, "UPDATE notifications SET seen = ?, seen_at = ? WHERE id = ?", seen, t, n.ID); err != nil {
+	if err := n.db.WithContext(ctx).
+		Model(&idb.Notification{}).
+		Where("id = ?", n.ID).
+		Updates(map[string]any{
+			"seen":    seen,
+			"seen_at": t,
+		}).
+		Error; err != nil {
 		return err
 	}
 
@@ -642,8 +660,7 @@ func (n *Notification) Saw(ctx context.Context, seen bool) error {
 }
 
 func (n *Notification) Delete(ctx context.Context) error {
-	_, err := msql.ExecContext(ctx, n.db, "DELETE FROM notifications WHERE id = ?", n.ID)
-	return err
+	return n.db.WithContext(ctx).Where("id = ?", n.ID).Delete(&idb.Notification{}).Error
 }
 
 // Update updates a notification.
@@ -653,8 +670,18 @@ func (n *Notification) Update(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	if _, err := msql.ExecContext(ctx, n.db, "UPDATE notifications SET notif = ?, updated_at = ? WHERE id = ?", n.notifRawJSON, time.Now(), n.ID); err != nil {
+	var notifData idb.JSONMap
+	if err := json.Unmarshal(n.notifRawJSON, &notifData); err != nil {
+		return err
+	}
+	if err := n.db.WithContext(ctx).
+		Model(&idb.Notification{}).
+		Where("id = ?", n.ID).
+		Updates(map[string]any{
+			"notif":      notifData,
+			"updated_at": time.Now(),
+		}).
+		Error; err != nil {
 		return err
 	}
 
@@ -927,33 +954,44 @@ func CreateCommentReplyNotification(ctx context.Context, db *gorm.DB, receiver u
 }
 
 func updateNewNotificationsCount(ctx context.Context, db *gorm.DB, user uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "UPDATE users SET notifications_new_count = (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND seen = FALSE) WHERE id = ?", user, user)
-	return err
+	var count int64
+	if err := db.WithContext(ctx).
+		Model(&idb.Notification{}).
+		Where("user_id = ? AND seen = ?", user, false).
+		Count(&count).
+		Error; err != nil {
+		return err
+	}
+	return db.WithContext(ctx).
+		Model(&idb.User{}).
+		Where("id = ?", user).
+		Update("notifications_new_count", int(count)).
+		Error
 }
 
 func resetNewNotificationsCount(ctx context.Context, db *gorm.DB, user uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "UPDATE users SET notifications_new_count = 0 WHERE id = ?", user)
-	return err
+	return db.WithContext(ctx).
+		Model(&idb.User{}).
+		Where("id = ?", user).
+		Update("notifications_new_count", 0).
+		Error
 }
 
 // markAllNotificationsAsSeen marks all notifications of user as seen if t is
 // zero, or only notifications of type t, if t is not zero.
 func markAllNotificationsAsSeen(ctx context.Context, db *gorm.DB, user uid.ID, t NotificationType) error {
-	query := "UPDATE notifications SET seen = TRUE, seen_at = ? WHERE user_id = ? "
-	var args []any
-	args = append(args, time.Now(), user)
-
+	query := db.WithContext(ctx).Model(&idb.Notification{}).Where("user_id = ?", user)
 	if t != "" {
-		query += "and type = ?"
-		args = append(args, t)
+		query = query.Where("type = ?", t)
 	}
-	_, err := msql.ExecContext(ctx, db, query, args...)
-	return err
+	return query.Updates(map[string]any{
+		"seen":    true,
+		"seen_at": time.Now(),
+	}).Error
 }
 
 func deleteAllNotifications(ctx context.Context, db *gorm.DB, user uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "DELETE FROM notifications WHERE user_id = ?", user)
-	return err
+	return db.WithContext(ctx).Where("user_id = ?", user).Delete(&idb.Notification{}).Error
 }
 
 // NotificationNewVotes is sent when a user votes on a post or a comment.
@@ -1248,19 +1286,28 @@ func createWelcomeNotification(ctx context.Context, db *gorm.DB, community strin
 func SendWelcomeNotifications(ctx context.Context, db *gorm.DB, community string, delay time.Duration) (int, error) {
 	// Check if the community exists
 	{
-		var tmp string
-		if err := msql.QueryRowContext(ctx, db, "SELECT name_lc FROM communities WHERE name_lc = ?", strings.ToLower(community)).Scan(&tmp); err != nil {
-			if err == sql.ErrNoRows {
+		var record idb.Community
+		if err := db.WithContext(ctx).
+			Select("name_lc").
+			Where("name_lc = ?", strings.ToLower(community)).
+			Take(&record).
+			Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return 0, fmt.Errorf("welcome community '%s' doesn't exist", community)
 			}
 			return 0, err
 		}
 	}
 
-	rows, err := msql.QueryContext(ctx, db, "SELECT id FROM users WHERE welcome_notification_sent = false AND created_at < ?", time.Now().Add(-1*delay))
+	rows, err := db.WithContext(ctx).
+		Table("users").
+		Select("id").
+		Where("welcome_notification_sent = ? AND created_at < ?", false, time.Now().Add(-1*delay)).
+		Rows()
 	if err != nil {
 		return 0, err
 	}
+	defer rows.Close()
 
 	var users []uid.ID
 	for rows.Next() {
@@ -1280,8 +1327,11 @@ func SendWelcomeNotifications(ctx context.Context, db *gorm.DB, community string
 		if err := createWelcomeNotification(ctx, db, community, user); err != nil {
 			return fmt.Errorf("failed to send welcome notification: %w", err)
 		}
-		_, err := msql.ExecContext(ctx, db, "update users set welcome_notification_sent = true where id = ?", user)
-		return err
+		return db.WithContext(ctx).
+			Model(&idb.User{}).
+			Where("id = ?", user).
+			Update("welcome_notification_sent", true).
+			Error
 	}
 
 	success := 0
@@ -1409,15 +1459,23 @@ func sendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID
 		return nil
 	}
 
-	if _, err := msql.ExecContext(ctx, db, "UPDATE announcement_posts SET sending_started_at = ? WHERE post_id = ?", time.Now(), post); err != nil {
+	if err := db.WithContext(ctx).
+		Model(&idb.AnnouncementPost{}).
+		Where("post_id = ?", post).
+		Update("sending_started_at", time.Now()).
+		Error; err != nil {
 		return err
 	}
 
 	sent := 0
 	for _, user := range users {
-		var rowID int
-		if err := msql.QueryRowContext(ctx, db, "SELECT id FROM announcement_notifications_sent WHERE post_id = ? AND user_id = ?", post, user).Scan(&rowID); err != nil {
-			if err != sql.ErrNoRows {
+		var record idb.AnnouncementNotificationSent
+		if err := db.WithContext(ctx).
+			Select("id").
+			Where("post_id = ? AND user_id = ?", post, user).
+			Take(&record).
+			Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
 		} else {
@@ -1426,7 +1484,10 @@ func sendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID
 			continue
 		}
 
-		if _, err := msql.ExecContext(ctx, db, "INSERT INTO announcement_notifications_sent (post_id, user_id) VALUES (?, ?)", post, user); err != nil {
+		if err := db.WithContext(ctx).Create(&idb.AnnouncementNotificationSent{
+			PostID: idb.UIDFrom(post),
+			UserID: idb.UIDFrom(user),
+		}).Error; err != nil {
 			return err
 		}
 
@@ -1438,16 +1499,30 @@ func sendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID
 		sent++
 		if sent%50 == 0 {
 			// For every 50 notifs sent update the total_sent count.
-			msql.ExecContext(ctx, db, "UPDATE announcement_posts SET total_sent = ? WHERE post_id = ?", sent, post)
+			db.WithContext(ctx).
+				Model(&idb.AnnouncementPost{}).
+				Where("post_id = ?", post).
+				Update("total_sent", sent)
 		}
 	}
 
-	totalSent := 0
-	if err := msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM announcement_notifications_sent WHERE post_id = ?", post).Scan(&totalSent); err != nil {
+	var totalSent int64
+	if err := db.WithContext(ctx).
+		Model(&idb.AnnouncementNotificationSent{}).
+		Where("post_id = ?", post).
+		Count(&totalSent).
+		Error; err != nil {
 		return err
 	}
 
-	if _, err := msql.ExecContext(ctx, db, "UPDATE announcement_posts SET sending_finished_at = ?, total_sent = ? WHERE post_id = ?", time.Now(), totalSent, post); err != nil {
+	if err := db.WithContext(ctx).
+		Model(&idb.AnnouncementPost{}).
+		Where("post_id = ?", post).
+		Updates(map[string]any{
+			"sending_finished_at": time.Now(),
+			"total_sent":          int(totalSent),
+		}).
+		Error; err != nil {
 		return err
 	}
 
@@ -1460,7 +1535,11 @@ func sendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID
 // not be one that expires quickly (such as a context gotten from
 // [http.Request]).
 func SendAnnouncementNotifications(ctx context.Context, db *gorm.DB, post uid.ID) error {
-	rows, err := msql.QueryContext(ctx, db, "SELECT post_id FROM announcement_posts WHERE sending_finished_at IS NULL")
+	rows, err := db.WithContext(ctx).
+		Table("announcement_posts").
+		Select("post_id").
+		Where("sending_finished_at IS NULL").
+		Rows()
 	if err != nil {
 		return err
 	}

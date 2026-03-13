@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	msql "github.com/discuitnet/discuit/internal/sql"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/uid"
 	"gorm.io/gorm"
 )
@@ -79,14 +79,9 @@ func (r *ImageRecord) ScanDestinations() []any {
 // GetImageRecords returns a slice of image records. If no images were found it
 // returns ErrImageNotFound.
 func GetImageRecords(ctx context.Context, db *gorm.DB, ids ...uid.ID) ([]*ImageRecord, error) {
-	query := msql.BuildSelectQuery("images", imageRecordSelectColumns, nil, "WHERE id IN "+msql.InClauseQuestionMarks(len(ids)))
-
-	args := make([]any, len(ids))
-	for i := range ids {
-		args[i] = ids[i]
-	}
-
-	rows, err := msql.QueryContext(ctx, db, query, args...)
+	rows, err := idb.Select(ctx, db, "images", imageRecordSelectColumns).
+		Where("id IN ?", ids).
+		Rows()
 	if err != nil {
 		return nil, err
 	}

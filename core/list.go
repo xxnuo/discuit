@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/discuitnet/discuit/internal/utils"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ListItemsSort int
@@ -82,24 +84,8 @@ type List struct {
 	LastUpdatedAt time.Time       `json:"lastUpdatedAt"`
 }
 
-func getLists(ctx context.Context, db *gorm.DB, where string, args ...any) ([]*List, error) {
-	query := msql.BuildSelectQuery("lists", []string{
-		"lists.id",
-		"lists.user_id",
-		"users.username",
-		"lists.name",
-		"lists.display_name",
-		"lists.description",
-		"lists.public",
-		"lists.num_items",
-		"lists.ordering",
-		"lists.created_at",
-		"lists.last_updated_at",
-	}, []string{
-		"INNER JOIN users on lists.user_id = users.id",
-	}, where)
-
-	rows, err := msql.QueryContext(ctx, db, query, args...)
+func getLists(ctx context.Context, query *gorm.DB) ([]*List, error) {
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +120,24 @@ func getLists(ctx context.Context, db *gorm.DB, where string, args ...any) ([]*L
 	return lists, nil
 }
 
+func selectListsQuery(ctx context.Context, db *gorm.DB) *gorm.DB {
+	return idb.Select(ctx, db, "lists", []string{
+		"lists.id",
+		"lists.user_id",
+		"users.username",
+		"lists.name",
+		"lists.display_name",
+		"lists.description",
+		"lists.public",
+		"lists.num_items",
+		"lists.ordering",
+		"lists.created_at",
+		"lists.last_updated_at",
+	}, idb.NewJoin("INNER JOIN users on lists.user_id = users.id"))
+}
+
 func GetList(ctx context.Context, db *gorm.DB, id int) (*List, error) {
-	lists, err := getLists(ctx, db, "WHERE lists.id = ?", id)
+	lists, err := getLists(ctx, selectListsQuery(ctx, db).Where("lists.id = ?", id))
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +148,7 @@ func GetList(ctx context.Context, db *gorm.DB, id int) (*List, error) {
 }
 
 func GetListByName(ctx context.Context, db *gorm.DB, user uid.ID, name string) (*List, error) {
-	lists, err := getLists(ctx, db, "WHERE user_id = ? AND lists.name = ?", user, name)
+	lists, err := getLists(ctx, selectListsQuery(ctx, db).Where("user_id = ? AND lists.name = ?", user, name))
 	if err != nil {
 		return nil, err
 	}
@@ -173,19 +175,19 @@ func GetUsersLists(ctx context.Context, db *gorm.DB, user uid.ID, sort, filter s
 		return nil, httperr.NewBadRequest("invalid-lists-filter", "Invalid lists filter.")
 	}
 
-	where := "WHERE user_id = ? "
+	query := selectListsQuery(ctx, db).Where("user_id = ?", user)
 	if filter == "public" {
-		where += "AND public = true "
+		query = query.Where("public = ?", true)
 	} else if filter == "private" {
-		where += "AND public = false "
+		query = query.Where("public = ?", false)
 	}
 	if sort == "name" {
-		where += "ORDER BY name ASC"
+		query = query.Order("name ASC")
 	} else if sort == "lastAdded" {
-		where += "ORDER BY last_updated_at DESC"
+		query = query.Order("last_updated_at DESC")
 	}
 
-	return getLists(ctx, db, where, user)
+	return getLists(ctx, query)
 }
 
 // listnameValid always returns an httperr.Error.
@@ -212,15 +214,18 @@ func CreateList(ctx context.Context, db *gorm.DB, user uid.ID, name, displayName
 	displayName = truncateListDisplayName(displayName)
 
 	description.String = utils.TruncateUnicodeString(description.String, maxUserProfileAboutLength)
-	query, args := msql.BuildInsertQuery("lists", []msql.ColumnValue{
-		{Name: "user_id", Value: user},
-		{Name: "name", Value: name},
-		{Name: "display_name", Value: displayName},
-		{Name: "description", Value: description},
-		{Name: "public", Value: public},
-		{Name: "ordering", Value: ListOrderingDefault},
-	})
-	_, err := msql.ExecContext(ctx, db, query, args...)
+	var descriptionValue *string
+	if description.Valid {
+		descriptionValue = &description.String
+	}
+	err := db.WithContext(ctx).Create(&idb.List{
+		UserID:      idb.UIDFrom(user),
+		Name:        name,
+		DisplayName: displayName,
+		Description: descriptionValue,
+		Public:      public,
+		Ordering:    int8(ListOrderingDefault),
+	}).Error
 	if err != nil && msql.IsErrDuplicateErr(err) {
 		return &httperr.Error{
 			HTTPStatus: http.StatusConflict,
@@ -241,22 +246,21 @@ func (l *List) Update(ctx context.Context, db *gorm.DB) error {
 	// Truncate:
 	l.Description.String = utils.TruncateUnicodeString(l.Description.String, maxUserProfileAboutLength)
 	l.DisplayName = truncateListDisplayName(l.DisplayName)
-
-	_, err := msql.ExecContext(ctx, db, `
-		UPDATE lists SET 
-			name = ?, 
-			display_name = ?, 
-			description = ?,
-			public = ?, 
-			ordering = ? 
-		WHERE lists.id = ?`,
-		l.Name,
-		l.DisplayName,
-		l.Description,
-		l.Public,
-		l.Sort,
-		l.ID)
-	return err
+	var descriptionValue *string
+	if l.Description.Valid {
+		descriptionValue = &l.Description.String
+	}
+	return db.WithContext(ctx).
+		Model(&idb.List{}).
+		Where("id = ?", l.ID).
+		Updates(map[string]any{
+			"name":         l.Name,
+			"display_name": l.DisplayName,
+			"description":  descriptionValue,
+			"public":       l.Public,
+			"ordering":     l.Sort,
+		}).
+		Error
 }
 
 // UnmarshalUpdatableFieldsJSON extracts the updatable values of the list from
@@ -278,69 +282,72 @@ func (l *List) UnmarshalUpdatableFieldsJSON(data []byte) error {
 }
 
 func (l *List) Delete(ctx context.Context, db *gorm.DB) error {
-	// The list items will be automaticaly deleted because ON DELETE CASCADE is
-	// set on the foreign key on the list_items table.
-	_, err := msql.ExecContext(ctx, db, "DELETE FROM lists WHERE id = ?", l.ID)
-	return err
+	return db.WithContext(ctx).Where("id = ?", l.ID).Delete(&idb.List{}).Error
 }
 
 func (l *List) AddItem(ctx context.Context, db *gorm.DB, targetType ContentType, targetID uid.ID) error {
-	errDup := errors.New("duplicate")
-	err := msql.Transact(ctx, db, func(tx *gorm.DB) error {
-		query, args := msql.BuildInsertQuery("list_items", []msql.ColumnValue{
-			{Name: "list_id", Value: l.ID},
-			{Name: "target_type", Value: targetType},
-			{Name: "target_id", Value: targetID},
-		})
-		if _, err := msql.ExecContext(ctx, tx, query, args...); err != nil {
-			if msql.IsErrDuplicateErr(err) {
-				return errDup
-			}
-			return err
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		item := idb.ListItem{
+			ListID:     uint64(l.ID),
+			TargetType: int8(targetType),
+			TargetID:   idb.UIDFrom(targetID),
 		}
-		if _, err := msql.ExecContext(ctx, tx, "UPDATE lists SET num_items = num_items + 1, last_updated_at = ? WHERE id = ?", time.Now(), l.ID); err != nil {
+		create := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&item)
+		if create.Error != nil {
+			return create.Error
+		}
+		if create.RowsAffected == 0 {
+			return nil
+		}
+		if err := tx.Model(&idb.List{}).
+			Where("id = ?", l.ID).
+			Updates(map[string]any{
+				"num_items":       gorm.Expr("num_items + 1"),
+				"last_updated_at": time.Now(),
+			}).
+			Error; err != nil {
 			return err
 		}
 		return nil
 	})
-	if err == errDup {
-		return nil
-	}
-	return err
 }
 
 func (l *List) DeleteItem(ctx context.Context, db *gorm.DB, targetType ContentType, targetID uid.ID) error {
-	err := msql.Transact(ctx, db, func(tx *gorm.DB) error {
-		var itemID int
-		if err := msql.QueryRow(tx, "SELECT id FROM list_items WHERE list_id = ? AND target_id = ? AND target_type = ?", l.ID, targetID, targetType).Scan(&itemID); err != nil {
-			if err == sql.ErrNoRows {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item idb.ListItem
+		err := tx.Select("id").
+			Where("list_id = ? AND target_id = ? AND target_type = ?", l.ID, targetID, targetType).
+			Take(&item).
+			Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil
 			}
 			return err
 		}
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM list_items WHERE id = ?", itemID); err != nil {
+		if err := tx.Where("id = ?", item.ID).Delete(&idb.ListItem{}).Error; err != nil {
 			return err
 		}
-		if _, err := msql.ExecContext(ctx, tx, "UPDATE lists SET num_items = num_items - 1 WHERE id = ?", l.ID); err != nil {
+		if err := tx.Model(&idb.List{}).
+			Where("id = ?", l.ID).
+			Update("num_items", gorm.Expr("num_items - 1")).
+			Error; err != nil {
 			return err
 		}
 		return nil
 	})
-	return err
 }
 
 func (l *List) DeleteAllItems(ctx context.Context, db *gorm.DB) error {
-	err := msql.Transact(ctx, db, func(tx *gorm.DB) error {
-		_, err := msql.ExecContext(ctx, db, "DELETE FROM list_items WHERE list_id = ?", l.ID)
-		if err != nil {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("list_id = ?", l.ID).Delete(&idb.ListItem{}).Error; err != nil {
 			return err
 		}
-		if _, err := msql.Exec(db, "UPDATE lists SET num_items = 0 WHERE id = ?", l.ID); err != nil {
+		if err := tx.Model(&idb.List{}).Where("id = ?", l.ID).Update("num_items", 0).Error; err != nil {
 			return err
 		}
 		return nil
 	})
-	return err
 }
 
 type ListItem struct {
@@ -354,10 +361,9 @@ type ListItem struct {
 }
 
 func GetListItem(ctx context.Context, db *gorm.DB, listID, itemID int) (*ListItem, error) {
-	query := buildSelectListItemsQuery("WHERE id = ? AND list_id = ?")
-	args := []any{itemID, listID}
-
-	rows, err := msql.QueryContext(ctx, db, query, args...)
+	rows, err := selectListItemsQuery(ctx, db).
+		Where("id = ? AND list_id = ?", itemID, listID).
+		Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -377,8 +383,7 @@ func GetListItem(ctx context.Context, db *gorm.DB, listID, itemID int) (*ListIte
 // The next string should contain either a timestamp or a marshaled uid.ID; if
 // not, the function will return an error. It's safe for next to be nil.
 func GetListItems(ctx context.Context, db *gorm.DB, listID, limit int, sort ListItemsSort, next *string, viewer *uid.ID) (*ListItemsResultSet, error) {
-	query := buildSelectListItemsQuery("WHERE list_id = ?")
-	args := []any{listID}
+	query := selectListItemsQuery(ctx, db).Where("list_id = ?", listID)
 
 	// Parse the pagination cursor, if present.
 	if next != nil {
@@ -390,25 +395,20 @@ func GetListItems(ctx context.Context, db *gorm.DB, listID, limit int, sort List
 			}
 			nextTime := time.Unix(i, 0)
 			if sort == ListItemsSortByAddedAsc {
-				query += " AND created_at >= ?"
+				query = query.Where("created_at >= ?", nextTime)
 			} else {
-				// order is ListItemsSortByAddedDsc.
-				query += " AND created_at <= ?"
+				query = query.Where("created_at <= ?", nextTime)
 			}
-			args = append(args, nextTime)
 		} else {
-			// next should be a uid.ID.
 			nextID, err := uid.FromString(*next)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse next (GetListItems, uid.ID): %w", err)
 			}
 			if sort == ListItemsSortByCreatedAsc {
-				query += " AND target_id >= ?"
+				query = query.Where("target_id >= ?", nextID)
 			} else {
-				// order is ListItemsSortByCreatedDsc
-				query += " AND target_id <= ?"
+				query = query.Where("target_id <= ?", nextID)
 			}
-			args = append(args, nextID)
 		}
 	}
 
@@ -423,14 +423,13 @@ func GetListItems(ctx context.Context, db *gorm.DB, listID, limit int, sort List
 	case ListItemsSortByCreatedDesc:
 		orderBy = "target_id ASC"
 	}
-	query += " ORDER BY " + orderBy
+	query = query.Order(orderBy)
 
 	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit+1) // +1 for an extra item for the next cursor.
+		query = query.Limit(limit + 1)
 	}
 
-	// Fetch the rows.
-	rows, err := msql.Query(db, query, args...)
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -499,20 +498,26 @@ func GetListItems(ctx context.Context, db *gorm.DB, listID, limit int, sort List
 }
 
 func (li *ListItem) Delete(ctx context.Context, db *gorm.DB) error {
-	err := msql.Transact(ctx, db, func(tx *gorm.DB) error {
-		if _, err := msql.ExecContext(ctx, tx, "UPDATE lists SET num_items = num_items - (SELECT COUNT(*) FROM list_items WHERE id = ?) WHERE id = ?", li.ID, li.ListID); err != nil {
-			return err
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("id = ?", li.ID).Delete(&idb.ListItem{})
+		if result.Error != nil {
+			return result.Error
 		}
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM list_items WHERE id = ?", li.ID); err != nil {
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		if err := tx.Model(&idb.List{}).
+			Where("id = ?", li.ListID).
+			Update("num_items", gorm.Expr("num_items - 1")).
+			Error; err != nil {
 			return err
 		}
 		return nil
 	})
-	return err
 }
 
-func buildSelectListItemsQuery(where string) string {
-	return "SELECT id, target_type, target_id, created_at FROM list_items " + where
+func selectListItemsQuery(ctx context.Context, db *gorm.DB) *gorm.DB {
+	return idb.Select(ctx, db, "list_items", []string{"id", "target_type", "target_id", "created_at"})
 }
 
 func scanListItems(rows *sql.Rows, listID int) ([]*ListItem, error) {
@@ -548,15 +553,16 @@ type ListItemsResultSet struct {
 // ListsItemIsSavedTo returns the ids of the lists the post or comment target is
 // saved in.
 func ListsItemIsSavedTo(ctx context.Context, db *gorm.DB, user uid.ID, targetID uid.ID, targetType ContentType) ([]int, error) {
-	rows, err := msql.QueryContext(ctx, db, `
-		select 
-			lists.id 
-		from list_items 
-		inner join lists on lists.id = list_items.list_id 
-		where 
-			list_items.target_id = ? 
-			and list_items.target_type = ?`,
-		targetID, targetType)
+	_ = user
+	rows, err := idb.Select(
+		ctx,
+		db,
+		"list_items",
+		[]string{"lists.id"},
+		idb.NewJoin("INNER JOIN lists on lists.id = list_items.list_id"),
+	).
+		Where("list_items.target_id = ? AND list_items.target_type = ?", targetID, targetType).
+		Rows()
 	if err != nil {
 		return nil, err
 	}

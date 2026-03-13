@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	msql "github.com/discuitnet/discuit/internal/sql"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/h2non/bimg"
 	"golang.org/x/exp/slices"
@@ -758,20 +758,13 @@ type ImageOptions struct {
 // and creates a row in the images table. The argument opts can be nil, in which
 // case default values are used.
 func SaveImage(ctx context.Context, db *gorm.DB, storeName string, file []byte, opts *ImageOptions) (*ImageRecord, error) {
-	tx, err := msql.BeginTx(ctx, db)
+	var id uid.ID
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var txErr error
+		id, txErr = SaveImageTx(ctx, tx, storeName, file, opts)
+		return txErr
+	})
 	if err != nil {
-		return nil, nil
-	}
-
-	id, err := SaveImageTx(ctx, tx, storeName, file, opts)
-	if err != nil {
-		if err := tx.Rollback().Error; err != nil {
-			log.Println("images.SaveImage rollback error: ", err)
-		}
-		return nil, err
-	}
-
-	if err = tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
@@ -835,18 +828,19 @@ func SaveImageTx(ctx context.Context, tx *gorm.DB, storeName string, file []byte
 	averageColor := AverageColor(decodedImg)
 
 	id := uid.New()
-	query, args := msql.BuildInsertQuery("images", []msql.ColumnValue{
-		{Name: "id", Value: id},
-		{Name: "store_name", Value: storeName},
-		{Name: "format", Value: opts.Format},
-		{Name: "width", Value: width},
-		{Name: "height", Value: height},
-		{Name: "size", Value: len(img)},
-		{Name: "upload_size", Value: len(file)},
-		{Name: "average_color", Value: averageColor},
-	})
-
-	if _, err = msql.ExecContext(ctx, tx, query, args...); err != nil {
+	if err = tx.WithContext(ctx).
+		Table("images").
+		Create(map[string]any{
+			"id":            id,
+			"store_name":    storeName,
+			"format":        opts.Format,
+			"width":         width,
+			"height":        height,
+			"size":          len(img),
+			"upload_size":   len(file),
+			"average_color": averageColor,
+		}).
+		Error; err != nil {
 		return uid.ID{}, err
 	}
 
@@ -880,13 +874,7 @@ func DeleteImagesTx(ctx context.Context, tx *gorm.DB, db *gorm.DB, images ...uid
 		}
 	}
 
-	args := make([]any, len(images))
-	for i := range images {
-		args[i] = images[i]
-	}
-
-	_, err = msql.ExecContext(ctx, tx, fmt.Sprintf("DELETE FROM images WHERE id IN %s", msql.InClauseQuestionMarks(len(images))), args...)
-	return err
+	return tx.WithContext(ctx).Where("id IN ?", images).Delete(&idb.Image{}).Error
 }
 
 func bimgProcessImage(buf []byte, o bimg.Options) ([]byte, error) {

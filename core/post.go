@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	"github.com/discuitnet/discuit/internal/httputil"
 	"github.com/discuitnet/discuit/internal/images"
@@ -1728,13 +1729,35 @@ func PurgePostsFromTempTables(ctx context.Context, db *gorm.DB) error {
 		total := 0
 		for again {
 			t := time.Now().Add(postsTablesValidity[i])
-			res, err := msql.ExecContext(ctx, db, "DELETE FROM "+table+" WHERE created_at < ? LIMIT ?", t, bulk)
+			var ids []uint64
+			err := db.WithContext(ctx).
+				Table(table).
+				Select("id").
+				Where("created_at < ?", t).
+				Order("id").
+				Limit(bulk).
+				Pluck("id", &ids).
+				Error
 			if err != nil {
 				return err
 			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return err
+			n := int64(len(ids))
+			if n > 0 {
+				switch table {
+				case "posts_today":
+					err = db.WithContext(ctx).Where("id IN ?", ids).Delete(&idb.PostToday{}).Error
+				case "posts_week":
+					err = db.WithContext(ctx).Where("id IN ?", ids).Delete(&idb.PostWeek{}).Error
+				case "posts_month":
+					err = db.WithContext(ctx).Where("id IN ?", ids).Delete(&idb.PostMonth{}).Error
+				case "posts_year":
+					err = db.WithContext(ctx).Where("id IN ?", ids).Delete(&idb.PostYear{}).Error
+				default:
+					err = fmt.Errorf("unsupported posts table %q", table)
+				}
+				if err != nil {
+					return err
+				}
 			}
 			total += int(n)
 			if n == 0 {

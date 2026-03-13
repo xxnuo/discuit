@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"gorm.io/gorm"
@@ -31,13 +31,15 @@ func CreateAnalyticsEvent(ctx context.Context, db *gorm.DB, name string, uniqueK
 		uniqueKeyHash = sum[:]
 	}
 
-	query, args := msql.BuildInsertQuery("analytics", []msql.ColumnValue{
-		{Name: "event_name", Value: name},
-		{Name: "unique_key", Value: uniqueKeyHash},
-		{Name: "payload", Value: payload},
-	})
+	record := idb.Analytics{
+		EventName: name,
+		Payload:   &payload,
+	}
+	if len(uniqueKeyHash) > 0 {
+		record.UniqueKey = idb.Bytes16(uniqueKeyHash)
+	}
 
-	_, err := msql.ExecContext(ctx, db, query, args...)
+	err := db.WithContext(ctx).Create(&record).Error
 	if err != nil && !msql.IsErrDuplicateErr(err) {
 		return err
 	}
@@ -70,73 +72,81 @@ func RecordBasicSiteStats(ctx context.Context, db *gorm.DB) error {
 	lastWeek := now.Add(-7 * 24 * time.Hour)
 	lastMonth := now.Add(-30 * 24 * time.Hour)
 
-	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ?", lastDay).Scan(&stats.UsersLastDay); err != nil {
+	var count int64
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("last_seen > ?", lastDay).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ?", lastWeek).Scan(&stats.UsersLastWeek); err != nil {
+	stats.UsersLastDay = int(count)
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("last_seen > ?", lastWeek).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ?", lastMonth).Scan(&stats.UsersLastMonth); err != nil {
+	stats.UsersLastWeek = int(count)
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("last_seen > ?", lastMonth).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ? and created_at <= ?", lastDay, lastDay).Scan(&stats.ReturnUsersLastDay); err != nil {
+	stats.UsersLastMonth = int(count)
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("last_seen > ? AND created_at <= ?", lastDay, lastDay).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ? and created_at <= ?", lastWeek, lastWeek).Scan(&stats.ReturnUsersLastWeek); err != nil {
+	stats.ReturnUsersLastDay = int(count)
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("last_seen > ? AND created_at <= ?", lastWeek, lastWeek).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from users where last_seen > ? and created_at <= ?", lastMonth, lastMonth).Scan(&stats.ReturnUsersLastMonth); err != nil {
+	stats.ReturnUsersLastWeek = int(count)
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("last_seen > ? AND created_at <= ?", lastMonth, lastMonth).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from users").Scan(&stats.TotalSignups); err != nil {
+	stats.ReturnUsersLastMonth = int(count)
+	if err := db.WithContext(ctx).Model(&idb.User{}).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from analytics").Scan(&stats.PWAInstalls); err != nil {
+	stats.TotalSignups = int(count)
+	if err := db.WithContext(ctx).Model(&idb.Analytics{}).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from web_push_subscriptions").Scan(&stats.PushNotifications); err != nil {
+	stats.PWAInstalls = int(count)
+	if err := db.WithContext(ctx).Model(&idb.WebPushSubscription{}).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from posts where created_at > ?", lastDay).Scan(&stats.PostsLastDay); err != nil {
+	stats.PushNotifications = int(count)
+	if err := db.WithContext(ctx).Model(&idb.Post{}).Where("created_at > ?", lastDay).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from posts where created_at > ?", lastWeek).Scan(&stats.PostsLastWeek); err != nil {
+	stats.PostsLastDay = int(count)
+	if err := db.WithContext(ctx).Model(&idb.Post{}).Where("created_at > ?", lastWeek).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from comments where created_at > ?", lastDay).Scan(&stats.CommentsLastDay); err != nil {
+	stats.PostsLastWeek = int(count)
+	if err := db.WithContext(ctx).Model(&idb.Comment{}).Where("created_at > ?", lastDay).Count(&count).Error; err != nil {
 		return err
 	}
-	if err := msql.QueryRow(db, "select count(*) from comments where created_at > ?", lastWeek).Scan(&stats.CommentsLastWeek); err != nil {
+	stats.CommentsLastDay = int(count)
+	if err := db.WithContext(ctx).Model(&idb.Comment{}).Where("created_at > ?", lastWeek).Count(&count).Error; err != nil {
 		return err
 	}
+	stats.CommentsLastWeek = int(count)
 
 	b, _ := json.Marshal(stats)
 	return CreateAnalyticsEvent(ctx, db, BasicSiteStatsEventName, "", string(b))
 }
 
 func GetBasicSiteStats(ctx context.Context, db *gorm.DB, limit int, next string) ([]*AnalyticsEvent, string, error) {
-	limitQuery := ""
-	if limit > 0 {
-		limitQuery = "LIMIT " + strconv.Itoa(limit+1)
-	}
-
-	query := "SELECT id, payload, created_at FROM analytics WHERE event_name = ?"
-	args := []any{BasicSiteStatsEventName}
-
-	nextQuery := ""
+	query := idb.Select(ctx, db, "analytics", []string{"id", "payload", "created_at"}).
+		Where("event_name = ?", BasicSiteStatsEventName)
 	if next != "" {
 		nextInt, err := strconv.ParseInt(next, 10, 64)
 		if err != nil {
 			return nil, "", httperr.NewBadRequest("invalid-next-value", "Invalid next parameter.")
 		}
 		nextTime := time.Unix(nextInt, 0)
-		nextQuery = "AND created_at <= ?"
-		args = append(args, nextTime)
+		query = query.Where("created_at <= ?", nextTime)
+	}
+	query = query.Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit + 1)
 	}
 
-	query = fmt.Sprintf("%s %s ORDER BY created_at DESC %s", query, nextQuery, limitQuery)
-
-	rows, err := msql.QueryContext(ctx, db, query, args...)
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, "", err
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	"github.com/discuitnet/discuit/internal/images"
 	msql "github.com/discuitnet/discuit/internal/sql"
@@ -225,45 +227,46 @@ func HashPassword(password []byte) ([]byte, error) {
 	return hash, nil
 }
 
-func buildSelectUserQuery(where string) string {
-	cols := []string{
-		"users.id",
-		"users.user_index",
-		"users.username",
-		"users.username_lc",
-		"users.email",
-		"users.email_confirmed_at",
-		"users.password",
-		"users.about_me",
-		"users.points",
-		"users.is_admin",
-		"users.no_posts",
-		"users.no_comments",
-		"users.notifications_new_count",
-		"users.last_seen",
-		"users.last_seen_ip",
-		"users.created_at",
-		"users.created_ip",
-		"users.deleted_at",
-		"users.banned_at",
-		"users.upvote_notifications_off",
-		"users.reply_notifications_off",
-		"users.home_feed",
-		"users.remember_feed_sort",
-		"users.embeds_off",
-		"users.hide_user_profile_pictures",
-		"users.welcome_notification_sent",
-		"users.require_alt_text",
-	}
-	cols = append(cols, images.ImageColumns("pro_pic")...)
-	joins := []string{
-		"LEFT JOIN images AS pro_pic ON pro_pic.id = users.pro_pic",
-	}
-	return msql.BuildSelectQuery("users", cols, joins, where)
+var selectUserCols = append([]string{
+	"users.id",
+	"users.user_index",
+	"users.username",
+	"users.username_lc",
+	"users.email",
+	"users.email_confirmed_at",
+	"users.password",
+	"users.about_me",
+	"users.points",
+	"users.is_admin",
+	"users.no_posts",
+	"users.no_comments",
+	"users.notifications_new_count",
+	"users.last_seen",
+	"users.last_seen_ip",
+	"users.created_at",
+	"users.created_ip",
+	"users.deleted_at",
+	"users.banned_at",
+	"users.upvote_notifications_off",
+	"users.reply_notifications_off",
+	"users.home_feed",
+	"users.remember_feed_sort",
+	"users.embeds_off",
+	"users.hide_user_profile_pictures",
+	"users.welcome_notification_sent",
+	"users.require_alt_text",
+}, images.ImageColumns("pro_pic")...)
+
+var selectUserJoins = []idb.Join{
+	idb.NewJoin("LEFT JOIN images AS pro_pic ON pro_pic.id = users.pro_pic"),
+}
+
+func buildSelectUserQuery(ctx context.Context, db *gorm.DB) *gorm.DB {
+	return idb.Select(ctx, db, "users", selectUserCols, selectUserJoins...)
 }
 
 func GetUser(ctx context.Context, db *gorm.DB, user uid.ID, viewer *uid.ID) (*User, error) {
-	rows, err := msql.QueryContext(ctx, db, buildSelectUserQuery("WHERE users.id = ?"), user)
+	rows, err := buildSelectUserQuery(ctx, db).Where("users.id = ?", user).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -279,13 +282,7 @@ func GetUsersByIDs(ctx context.Context, db *gorm.DB, IDs []uid.ID, viewer *uid.I
 	if len(IDs) == 0 {
 		return nil, nil
 	}
-	args := make([]any, len(IDs))
-	for i := range IDs {
-		args[i] = IDs[i]
-	}
-
-	query := buildSelectUserQuery(fmt.Sprintf("WHERE users.id IN %s", msql.InClauseQuestionMarks(len(IDs))))
-	rows, err := msql.Query(db, query, args...)
+	rows, err := buildSelectUserQuery(ctx, db).Where("users.id IN ?", IDs).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -300,13 +297,7 @@ func GetUsersByUsernames(ctx context.Context, db *gorm.DB, usernames []string, v
 	if len(usernames) == 0 {
 		return nil, nil
 	}
-	args := make([]any, len(usernames))
-	for i := range usernames {
-		args[i] = usernames[i]
-	}
-
-	query := buildSelectUserQuery(fmt.Sprintf("WHERE users.username IN %s", msql.InClauseQuestionMarks(len(usernames))))
-	rows, err := msql.Query(db, query, args...)
+	rows, err := buildSelectUserQuery(ctx, db).Where("users.username IN ?", usernames).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +309,7 @@ func GetUsersByUsernames(ctx context.Context, db *gorm.DB, usernames []string, v
 }
 
 func GetUserByUsername(ctx context.Context, db *gorm.DB, username string, viewer *uid.ID) (*User, error) {
-	rows, err := msql.QueryContext(ctx, db, buildSelectUserQuery("WHERE users.username_lc = ?"), strings.ToLower(username))
+	rows, err := buildSelectUserQuery(ctx, db).Where("users.username_lc = ?", strings.ToLower(username)).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +321,7 @@ func GetUserByUsername(ctx context.Context, db *gorm.DB, username string, viewer
 }
 
 func GetUserByEmail(ctx context.Context, db *gorm.DB, email string, viewer *uid.ID) (*User, error) {
-	rows, err := msql.QueryContext(ctx, db, buildSelectUserQuery("WHERE users.email = ?"), email)
+	rows, err := buildSelectUserQuery(ctx, db).Where("users.email = ?", email).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -501,15 +492,20 @@ func RegisterUser(ctx context.Context, db *gorm.DB, username, email, password, i
 	}
 	id := uid.New()
 
-	query, args := msql.BuildInsertQuery("users", []msql.ColumnValue{
-		{Name: "id", Value: id},
-		{Name: "username", Value: username},
-		{Name: "username_lc", Value: strings.ToLower(username)},
-		{Name: "email", Value: nullEmail},
-		{Name: "password", Value: hash},
-		{Name: "created_ip", Value: ipany},
-	})
-	_, err = msql.ExecContext(ctx, db, query, args...)
+	record := &idb.User{
+		ID:         idb.UIDFrom(id),
+		Username:   username,
+		UsernameLC: strings.ToLower(username),
+		Password:   string(hash),
+	}
+	if nullEmail.Valid {
+		record.Email = &nullEmail.String
+	}
+	if ipStr, ok := ipany.(string); ok {
+		ipValue := idb.IPFrom(net.ParseIP(ipStr))
+		record.CreatedIP = &ipValue
+	}
+	err = db.WithContext(ctx).Create(record).Error
 	if err != nil {
 		return nil, err
 	}
@@ -528,8 +524,9 @@ func RegisterUser(ctx context.Context, db *gorm.DB, username, email, password, i
 }
 
 func addUserToDefaultCommunities(ctx context.Context, db *gorm.DB, user uid.ID) error {
-	query := "SELECT communities.id FROM communities INNER JOIN default_communities ON communities.name_lc = default_communities.name_lc"
-	rows, err := msql.QueryContext(ctx, db, query)
+	rows, err := idb.Select(ctx, db, "communities", []string{"communities.id"},
+		idb.NewJoin("INNER JOIN default_communities ON communities.name_lc = default_communities.name_lc"),
+	).Rows()
 	if err != nil {
 		return err
 	}
@@ -550,40 +547,46 @@ func addUserToDefaultCommunities(ctx context.Context, db *gorm.DB, user uid.ID) 
 		return nil
 	}
 
-	return msql.Transact(ctx, db, func(tx *gorm.DB) (err error) {
-		q, args, ids := "", make([]any, 0, 2*len(communities)), make([]any, len(communities))
-		for i, id := range communities {
-			if i != 0 {
-				q += ","
-			}
-			q += "(?, ?) "
-			args = append(args, id, user)
-			ids[i] = communities[i]
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		rows := make([]idb.CommunityMember, 0, len(communities))
+		for _, communityID := range communities {
+			rows = append(rows, idb.CommunityMember{
+				CommunityID: idb.UIDFrom(communityID),
+				UserID:      idb.UIDFrom(user),
+			})
 		}
-		if _, err = msql.ExecContext(ctx, tx, "INSERT INTO community_members (community_id, user_id) VALUES "+q, args...); err != nil {
+		if err := tx.Create(&rows).Error; err != nil {
 			return err
 		}
-		if _, err := msql.ExecContext(ctx, tx, "UPDATE communities SET no_members = no_members + 1 WHERE id IN "+msql.InClauseQuestionMarks(len(ids)), ids...); err != nil {
-			return err
-		}
-		return nil
+		return tx.Model(&idb.Community{}).
+			Where("id IN ?", communities).
+			Update("no_members", gorm.Expr("no_members + ?", 1)).
+			Error
 	})
 }
 
 func usernameExists(ctx context.Context, db *gorm.DB, username string) (exists bool, user uid.ID, err error) {
 	username = strings.ToLower(username)
-	if err := msql.QueryRowContext(ctx, db, "SELECT id FROM users WHERE username_lc = ?", username).Scan(&user); err == nil {
+	var row struct {
+		ID uid.ID
+	}
+	if err := db.WithContext(ctx).Table("users").Select("id").Where("username_lc = ?", username).Take(&row).Error; err == nil {
 		exists = true
-	} else if err == sql.ErrNoRows {
+		user = row.ID
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
 	return
 }
 
 func userWithEmailExists(ctx context.Context, db *gorm.DB, email string) (exists bool, user uid.ID, err error) {
-	if err := msql.QueryRowContext(ctx, db, "SELECT id FROM users WHERE email = ?", email).Scan(&user); err == nil {
+	var row struct {
+		ID uid.ID
+	}
+	if err := db.WithContext(ctx).Table("users").Select("id").Where("email = ?", email).Take(&row).Error; err == nil {
 		exists = true
-	} else if err == sql.ErrNoRows {
+		user = row.ID
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
 	return
@@ -612,30 +615,33 @@ func MatchLoginCredentials(ctx context.Context, db *gorm.DB, username, password 
 
 // incrementUserPoints adds amount to user's points.
 func incrementUserPoints(ctx context.Context, tx *gorm.DB, user uid.ID, amount int) error {
-	_, err := msql.ExecContext(ctx, tx, "UPDATE users SET points = points + ? WHERE id = ?", amount, user)
-	return err
+	return tx.WithContext(ctx).
+		Model(&idb.User{}).
+		Where("id = ?", user).
+		Update("points", gorm.Expr("points + ?", amount)).
+		Error
 }
 
 // If db is nil, tx is used for the query execution.
 func getUserPointsAndCreatedAt(ctx context.Context, db *gorm.DB, tx *gorm.DB, user uid.ID) (int, time.Time, error) {
 	var (
-		points int
-		t      time.Time
-		row    *sql.Row
-		query  = "SELECT points, created_at FROM users WHERE users.id = ?"
-		args   = []any{user}
+		row struct {
+			Points    int
+			CreatedAt time.Time
+		}
+		query *gorm.DB
 	)
 
 	if db != nil {
-		row = msql.QueryRowContext(ctx, db, query, args...)
+		query = db.WithContext(ctx)
 	} else {
-		row = msql.QueryRowContext(ctx, tx, query, args...)
+		query = tx.WithContext(ctx)
 	}
 
-	if err := row.Scan(&points, &t); err != nil {
-		return 0, t, err
+	if err := query.Table("users").Select("points", "created_at").Where("users.id = ?", user).Take(&row).Error; err != nil {
+		return 0, time.Time{}, err
 	}
-	return points, t, nil
+	return row.Points, row.CreatedAt, nil
 }
 
 func userAllowedToIncrementPoints(ctx context.Context, tx *gorm.DB, user uid.ID, requiredPoints int, requiredAge time.Duration) (bool, error) {
@@ -661,29 +667,18 @@ func (u *User) Update(ctx context.Context, db *gorm.DB) error {
 	}
 
 	u.About.String = utils.TruncateUnicodeString(u.About.String, maxUserProfileAboutLength)
-	_, err := msql.ExecContext(ctx, db, `
-	UPDATE users SET
-		email = ?, 
-		about_me = ?,
-		upvote_notifications_off = ?,
-		reply_notifications_off = ?,
-		home_feed = ?,
-		remember_feed_sort = ?,
-		embeds_off = ?,
-		hide_user_profile_pictures = ?,
-		require_alt_text = ?
-	WHERE id = ?`,
-		u.EmailPublic,
-		u.About,
-		u.UpvoteNotificationsOff,
-		u.ReplyNotificationsOff,
-		u.HomeFeed,
-		u.RememberFeedSort,
-		u.EmbedsOff,
-		u.HideUserProfilePictures,
-		u.RequireAltText,
-		u.ID)
-	return err
+	values := map[string]any{
+		"email":                      u.EmailPublic,
+		"about_me":                   u.About,
+		"upvote_notifications_off":   u.UpvoteNotificationsOff,
+		"reply_notifications_off":    u.ReplyNotificationsOff,
+		"home_feed":                  u.HomeFeed,
+		"remember_feed_sort":         u.RememberFeedSort,
+		"embeds_off":                 u.EmbedsOff,
+		"hide_user_profile_pictures": u.HideUserProfilePictures,
+		"require_alt_text":           u.RequireAltText,
+	}
+	return db.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Updates(values).Error
 }
 
 func (u *User) IsGhost() bool {
@@ -733,9 +728,11 @@ func (u *User) MarshalJSONForAdminViewer(ctx context.Context, db *gorm.DB) ([]by
 		LastSeenIP: u.LastSeenIP,
 	}
 
-	if err := msql.QueryRow(db, "SELECT COUNT(*) FROM web_push_subscriptions WHERE user_id = ?", u.ID).Scan(&user.WebPushSubsriptionsCount); err != nil {
+	var count int64
+	if err := db.Model(&idb.WebPushSubscription{}).Where("user_id = ?", u.ID).Count(&count).Error; err != nil {
 		return nil, err
 	}
+	user.WebPushSubsriptionsCount = int(count)
 
 	return json.Marshal(user)
 }
@@ -750,88 +747,56 @@ func (u *User) Delete(ctx context.Context, db *gorm.DB) error {
 		return errors.New("cannot delete banned account (unban user first and then continue)")
 	}
 
-	return msql.Transact(ctx, db, func(tx *gorm.DB) (err error) {
-		// Remove the user's membership of all communities the user is a member of.
-		if _, err := msql.ExecContext(ctx, tx, `
-			UPDATE communities 
-			SET no_members = no_members - 1 
-			WHERE id IN (SELECT community_id FROM community_members WHERE user_id = ?)`, u.ID); err != nil {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		subQuery := tx.Table("community_members").Select("community_id").Where("user_id = ?", u.ID)
+		if err := tx.Model(&idb.Community{}).
+			Where("id IN (?)", subQuery).
+			Update("no_members", gorm.Expr("no_members - ?", 1)).
+			Error; err != nil {
 			return err
 		}
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM community_members WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.CommunityMember{}).Error; err != nil {
 			return err
 		}
-
-		// Remove the user from all mod positions the user holds.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM community_mods WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.CommunityMod{}).Error; err != nil {
 			return err
 		}
-
-		// Unban the user from all communities.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM community_banned WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.CommunityBanned{}).Error; err != nil {
 			return err
 		}
-
-		// Set the author deleted column of the comments.
-		if _, err := msql.ExecContext(ctx, tx, "UPDATE comments SET user_deleted = TRUE WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Model(&idb.Comment{}).Where("user_id = ?", u.ID).Update("user_deleted", true).Error; err != nil {
 			return err
 		}
-
-		// Delete the user's notifications.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM notifications WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.Notification{}).Error; err != nil {
 			return err
 		}
-
-		// Delete both the user's muted users and muted by's.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM muted_users WHERE user_id = ? OR muted_user_id = ?", u.ID, u.ID); err != nil {
+		if err := tx.Where("user_id = ? OR muted_user_id = ?", u.ID, u.ID).Delete(&idb.MutedUser{}).Error; err != nil {
 			return err
 		}
-
-		// Delete the user's muted communities.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM muted_communities WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.MutedCommunity{}).Error; err != nil {
 			return err
 		}
-
-		// Delete the user's web push subscriptions.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM web_push_subscriptions WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.WebPushSubscription{}).Error; err != nil {
 			return err
 		}
-
-		// Delete the user's lists.
-		if _, err := msql.ExecContext(ctx, tx, "DELETE FROM lists WHERE user_id = ?", u.ID); err != nil {
+		if err := tx.Where("user_id = ?", u.ID).Delete(&idb.List{}).Error; err != nil {
 			return err
 		}
-
-		// Delete the user's profile picture
 		if err := u.DeleteProPicTx(ctx, db, tx); err != nil {
 			return err
 		}
-
-		// Finally, set the deleted state of the user.
 		now := time.Now()
-		q := `UPDATE users SET 
-				email = ?, 
-				email_confirmed_at = ?,
-				password = ?, 
-				about_me = ?, 
-				is_admin = ?,
-				notifications_new_count = ?,
-				deleted_at = ? 
-			  WHERE id = ?`
-		args := []any{
-			nil,
-			nil,
-			utils.GenerateStringID(48),
-			nil,
-			false,
-			0,
-			now,
-			u.ID,
-		}
-		if _, err := msql.ExecContext(ctx, tx, q, args...); err != nil {
+		if err := tx.Model(&idb.User{}).Where("id = ?", u.ID).Updates(map[string]any{
+			"email":                   nil,
+			"email_confirmed_at":      nil,
+			"password":                utils.GenerateStringID(48),
+			"about_me":                nil,
+			"is_admin":                false,
+			"notifications_new_count": 0,
+			"deleted_at":              now,
+		}).Error; err != nil {
 			return err
 		}
-
 		u.DeletedAt = msql.NewNullTime(now)
 		u.NumNewNotifications = 0
 		return nil
@@ -846,20 +811,31 @@ func (u *User) DeleteContent(ctx context.Context, db *gorm.DB, n int, admin uid.
 		log.Printf("Took %v to delete content of user %s\n", time.Since(t), u.Username)
 	}()
 
-	where, args := "WHERE posts.user_id = ?", []any{u.ID}
+	postIDsQuery := db.WithContext(ctx).Table("posts").Select("id").Where("user_id = ?", u.ID)
 	if n > 0 {
 		since := time.Now().Add(-1 * time.Hour * 24 * time.Duration(n))
-		where += " AND posts.created_at > ?"
-		args = append(args, since)
+		postIDsQuery = postIDsQuery.Where("created_at > ?", since)
 	}
 
-	query := buildSelectPostQuery(false, where)
-	rows, err := msql.QueryContext(ctx, db, query, args...)
+	rows, err := postIDsQuery.Rows()
 	if err != nil {
 		return err
 	}
-	posts, err := scanPosts(ctx, db, rows, nil)
-	if err != nil && err != errPostNotFound {
+	defer rows.Close()
+
+	var postIDs []uid.ID
+	for rows.Next() {
+		var id uid.ID
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		postIDs = append(postIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	posts, err := GetPostsByIDs(ctx, db, nil, true, postIDs...)
+	if err != nil {
 		return err
 	}
 
@@ -871,15 +847,14 @@ func (u *User) DeleteContent(ctx context.Context, db *gorm.DB, n int, admin uid.
 		}
 	}
 
-	where, args = "WHERE comments.user_id = ?", []any{u.ID}
+	where, args := "comments.user_id = ?", []any{u.ID}
 	if n > 0 {
 		since := time.Now().Add(-1 * time.Hour * 24 * time.Duration(n))
 		where += " AND comments.created_at > ?"
 		args = append(args, since)
 	}
 
-	query = buildSelectCommentsQuery(false, where)
-	rows, err = msql.QueryContext(ctx, db, query, args...)
+	rows, err = selectCommentsQuery(ctx, db, nil).Where(where, args...).Rows()
 	if err != nil {
 		return err
 	}
@@ -905,7 +880,7 @@ func (u *User) DeleteContent(ctx context.Context, db *gorm.DB, n int, admin uid.
 // Note: An admin can be banned.
 func (u *User) Ban(ctx context.Context, db *gorm.DB) error {
 	t := time.Now()
-	_, err := msql.ExecContext(ctx, db, "UPDATE users SET banned_at = ? WHERE id = ?", t, u.ID)
+	err := db.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Update("banned_at", t).Error
 	if err == nil {
 		u.BannedAt = msql.NewNullTime(t)
 		u.Banned = true
@@ -914,8 +889,7 @@ func (u *User) Ban(ctx context.Context, db *gorm.DB) error {
 }
 
 func (u *User) Unban(ctx context.Context, db *gorm.DB) error {
-	_, err := msql.ExecContext(ctx, db, "UPDATE users SET banned_at = NULL WHERE id = ?", u.ID)
-	return err
+	return db.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Update("banned_at", nil).Error
 }
 
 // MakeAdmin makes the user an admin of the site. If isAdmin is false
@@ -937,7 +911,7 @@ func (u *User) ChangePassword(ctx context.Context, db *gorm.DB, previousPass, ne
 	if err != nil {
 		return err
 	}
-	_, err = msql.ExecContext(ctx, db, "UPDATE users SET password = ? WHERE id = ?", hash, u.ID)
+	err = db.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Update("password", string(hash)).Error
 	u.Password = string(hash)
 	return err
 }
@@ -963,10 +937,11 @@ func (u *User) DeleteAllNotifications(ctx context.Context, db *gorm.DB) error {
 // GetBannedFromCommunities returns the list of communities that user
 // is banned from.
 func (u *User) GetBannedFromCommunities(ctx context.Context, db *gorm.DB) ([]uid.ID, error) {
-	rows, err := msql.QueryContext(ctx, db, "SELECT community_id, expires FROM community_banned WHERE user_id = ?", u.ID)
+	rows, err := db.WithContext(ctx).Table("community_banned").Select("community_id", "expires").Where("user_id = ?", u.ID).Rows()
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var ids []uid.ID
 	var expires []msql.NullTime
@@ -1008,14 +983,21 @@ func (u *User) Saw(ctx context.Context, db *gorm.DB, userIP string) error {
 // UserSeen updates user's LastSeen to current time. It also updates the IP
 // address of the user.
 func UserSeen(ctx context.Context, db *gorm.DB, user uid.ID, userIP string) error {
-	_, err := msql.ExecContext(ctx, db, "UPDATE users SET last_seen = ?, last_seen_ip = ? WHERE id = ? AND deleted_at IS NULL", time.Now(), userIP, user)
-	return err
+	return db.WithContext(ctx).
+		Model(&idb.User{}).
+		Where("id = ? AND deleted_at IS NULL", user).
+		Updates(map[string]any{
+			"last_seen":    time.Now(),
+			"last_seen_ip": userIP,
+		}).
+		Error
 }
 
 // CountAllUsers return the no of users of the site, including deleted users.
 func CountAllUsers(ctx context.Context, db *gorm.DB) (n int, err error) {
-	row := msql.QueryRowContext(ctx, db, "SELECT COUNT(*) FROM users")
-	err = row.Scan(&n)
+	var count int64
+	err = db.WithContext(ctx).Model(&idb.User{}).Count(&count).Error
+	n = int(count)
 	return
 }
 
@@ -1036,7 +1018,7 @@ func (u *User) DeleteProPicTx(ctx context.Context, db *gorm.DB, tx *gorm.DB) err
 	if u.ProPic == nil {
 		return nil
 	}
-	if _, err := msql.ExecContext(ctx, db, "UPDATE users SET pro_pic = NULL where id = ?", u.ID); err != nil {
+	if err := db.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Update("pro_pic", nil).Error; err != nil {
 		return fmt.Errorf("failed to set users.pro_pic to null for user %s: %w", u.Username, err)
 	}
 	if err := images.DeleteImagesTx(ctx, tx, db, *u.ProPic.ID); err != nil {
@@ -1047,7 +1029,7 @@ func (u *User) DeleteProPicTx(ctx context.Context, db *gorm.DB, tx *gorm.DB) err
 }
 
 func (u *User) DeleteProPic(ctx context.Context, db *gorm.DB) error {
-	return msql.Transact(ctx, db, func(tx *gorm.DB) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return u.DeleteProPicTx(ctx, db, tx)
 	})
 }
@@ -1058,7 +1040,7 @@ func (u *User) UpdateProPic(ctx context.Context, db *gorm.DB, image []byte) erro
 	}
 
 	var newImageID uid.ID
-	err := msql.Transact(ctx, db, func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := u.DeleteProPicTx(ctx, db, tx); err != nil {
 			return err
 		}
@@ -1071,7 +1053,7 @@ func (u *User) UpdateProPic(ctx context.Context, db *gorm.DB, image []byte) erro
 		if err != nil {
 			return fmt.Errorf("fail to save user pro pic: %w", err)
 		}
-		if _, err := msql.ExecContext(ctx, tx, "UPDATE users SET pro_pic = ? WHERE id = ?", imageID, u.ID); err != nil {
+		if err := tx.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Update("pro_pic", imageID).Error; err != nil {
 			// Attempt to delete the image
 			if err := images.DeleteImagesTx(ctx, tx, db, imageID); err != nil {
 				log.Printf("failed to delete image (core.User.UpdateProPic): %v\n", err)
@@ -1104,14 +1086,16 @@ func (u *User) MutedBy(ctx context.Context, db *gorm.DB, user uid.ID) (bool, err
 
 // badgeTypeInt returns the int badge type of badgeType.
 func badgeTypeInt(db *gorm.DB, badgeType string) (int, error) {
-	var badgeTypeID int
-	if err := msql.QueryRow(db, "SELECT id FROM badge_types WHERE name = ?", badgeType).Scan(&badgeTypeID); err != nil {
-		if err == sql.ErrNoRows {
+	var row struct {
+		ID int
+	}
+	if err := db.Table("badge_types").Select("id").Where("name = ?", badgeType).Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, httperr.NewNotFound("badge_type_not_found", "Badge type not found.")
 		}
 		return 0, err
 	}
-	return badgeTypeID, nil
+	return row.ID, nil
 }
 
 // AddBadge addes new badge to u. Also, u.Badges is refetched upon a successful
@@ -1125,7 +1109,7 @@ func (u *User) AddBadge(ctx context.Context, db *gorm.DB, badgeType string) erro
 	if err != nil {
 		return err
 	}
-	_, err = msql.Exec(db, "INSERT INTO user_badges (type, user_id) VALUES (?, ?)", badgeTypeInt, u.ID)
+	err = db.Create(&idb.UserBadge{Type: uint(badgeTypeInt), UserID: idb.UIDFrom(u.ID)}).Error
 	if err != nil && !msql.IsErrDuplicateErr(err) {
 		return err
 	}
@@ -1146,8 +1130,7 @@ func (u *User) RemoveBadgesByType(db *gorm.DB, badgeType string) error {
 	if err != nil {
 		return err
 	}
-	_, err = msql.Exec(db, "DELETE FROM user_badges WHERE type = ? AND user_id = ?", badgeTypeInt, u.ID)
-	return err
+	return db.Where("type = ? AND user_id = ?", badgeTypeInt, u.ID).Delete(&idb.UserBadge{}).Error
 }
 
 func (u *User) RemoveBadge(db *gorm.DB, id int) error {
@@ -1155,34 +1138,39 @@ func (u *User) RemoveBadge(db *gorm.DB, id int) error {
 		return ErrUserDeleted
 	}
 
-	_, err := msql.Exec(db, "DELTE FROM user_badges WHERE id = ? and user_id = ?", id, u.ID)
-	return err
+	return db.Where("id = ? and user_id = ?", id, u.ID).Delete(&idb.UserBadge{}).Error
 }
 
 func (u *User) HidePost(ctx context.Context, db *gorm.DB, postID uid.ID) error {
-	return msql.Transact(ctx, db, func(tx *gorm.DB) error {
-		if _, err := msql.ExecContext(ctx, tx, "INSERT INTO hidden_posts (user_id, post_id) VALUES (?, ?)", u.ID, postID); err != nil {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&idb.HiddenPost{UserID: idb.UIDFrom(u.ID), PostID: idb.UIDFrom(postID)}).Error; err != nil {
 			if msql.IsErrDuplicateErr(err) {
 				return nil
 			}
 			return err
 		}
 
-		count := 0
-		if err := msql.QueryRowContext(ctx, tx, "SELECT COUNT(*) FROM hidden_posts WHERE user_id = ?", u.ID).Scan(&count); err != nil {
+		var count int64
+		if err := tx.Model(&idb.HiddenPost{}).Where("user_id = ?", u.ID).Count(&count).Error; err != nil {
 			return err
 		}
-
-		// If there are more then maxHiddenPosts hidden posts, delete the excess
-		// rows, choosing the oldest ones.
-		if count > maxHiddenPosts {
-			_, err := msql.ExecContext(
-				ctx, tx, "DELETE FROM hidden_posts WHERE user_id = ? AND created_at <= (SELECT created_at FROM hidden_posts WHERE user_id = ? ORDER BY created_at DESC LIMIT 1 OFFSET ?)",
-				u.ID,
-				u.ID,
-				maxHiddenPosts,
-			)
-			if err != nil {
+		if count > int64(maxHiddenPosts) {
+			var threshold struct {
+				CreatedAt time.Time
+			}
+			if err := tx.Table("hidden_posts").
+				Select("created_at").
+				Where("user_id = ?", u.ID).
+				Order("created_at DESC").
+				Offset(maxHiddenPosts).
+				Limit(1).
+				Take(&threshold).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
+			}
+			if err := tx.Where("user_id = ? AND created_at <= ?", u.ID, threshold.CreatedAt).Delete(&idb.HiddenPost{}).Error; err != nil {
 				return err
 			}
 		}
@@ -1191,14 +1179,13 @@ func (u *User) HidePost(ctx context.Context, db *gorm.DB, postID uid.ID) error {
 }
 
 func (u *User) UnhidePost(ctx context.Context, db *gorm.DB, postID uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "DELETE FROM hidden_posts WHERE user_id = ? AND post_id = ?", u.ID, postID)
-	return err
+	return db.WithContext(ctx).Where("user_id = ? AND post_id = ?", u.ID, postID).Delete(&idb.HiddenPost{}).Error
 }
 
 // NewBadgeType creates a new type of user badge. Calling this function more
 // than once with the same name will not result in an error.
 func NewBadgeType(db *gorm.DB, name string) error {
-	if _, err := msql.Exec(db, "INSERT INTO badge_types (name) VALUES (?)", name); err != nil && !msql.IsErrDuplicateErr(err) {
+	if err := db.Create(&idb.BadgeType{Name: name}).Error; err != nil && !msql.IsErrDuplicateErr(err) {
 		return err
 	}
 	return nil
@@ -1232,16 +1219,11 @@ func fetchBadges(db *gorm.DB, users ...*User) error {
 		m[user.ID] = user
 	}
 
-	query := fmt.Sprintf(`
-		SELECT	b.id, 
-				b.type, 
-				t.name,
-				b.user_id, 
-				b.created_at 
-		FROM user_badges AS b 
-		INNER JOIN badge_types AS t ON b.type = t.id 
-		WHERE user_id IN %s`, msql.InClauseQuestionMarks(len(userIDs)))
-	rows, err := msql.Query(db, query, userIDs...)
+	rows, err := db.Table("user_badges AS b").
+		Select("b.id", "b.type", "t.name", "b.user_id", "b.created_at").
+		Joins("INNER JOIN badge_types AS t ON b.type = t.id").
+		Where("b.user_id IN ?", userIDs).
+		Rows()
 	if err != nil {
 		return err
 	}
@@ -1301,7 +1283,7 @@ func (ac *adminsCacheStore) isAdmin(db *gorm.DB, user uid.ID) (bool, error) {
 }
 
 func (ac *adminsCacheStore) refresh(db *gorm.DB) error {
-	rows, err := msql.Query(db, "select id, username from users where users.is_admin = true")
+	rows, err := db.Table("users").Select("id", "username").Where("users.is_admin = ?", true).Rows()
 	if err != nil {
 		return err
 	}
@@ -1364,7 +1346,7 @@ func MakeAdmin(ctx context.Context, db *gorm.DB, user string, isAdmin bool) (*Us
 	}
 
 	// Note: Duplicate the changes to the User.Delete function when making changes to this SQL query.
-	if _, err = msql.ExecContext(ctx, db, "UPDATE users SET is_admin = ? WHERE id = ?", isAdmin, u.ID); err != nil {
+	if err = db.WithContext(ctx).Model(&idb.User{}).Where("id = ?", u.ID).Update("is_admin", isAdmin).Error; err != nil {
 		return nil, err
 	}
 
@@ -1388,9 +1370,11 @@ const (
 // The returned bool indicates whether the call to this function created the
 // ghost user (if the ghost user was already created, it will be false).
 func CreateGhostUser(db *gorm.DB) (bool, error) {
-	var s string
-	if err := msql.QueryRow(db, "SELECT username_lc FROM users WHERE username_lc = ?", GhostUserUsername).Scan(&s); err != nil {
-		if err == sql.ErrNoRows {
+	var row struct {
+		UsernameLC string
+	}
+	if err := db.Table("users").Select("username_lc").Where("username_lc = ?", GhostUserUsername).Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Ghost user not found; create one.
 			_, createErr := RegisterUser(context.Background(), db, GhostUserUsername, "", utils.GenerateStringID(48), "")
 			return createErr == nil, createErr
@@ -1403,9 +1387,11 @@ func CreateGhostUser(db *gorm.DB) (bool, error) {
 // CreateNobodyUser creates a user named nobody and makes that user an admin.
 // This is an admin account reserved for programmatic admin actions.
 func CreateNobodyUser(db *gorm.DB) (bool, error) {
-	var s string
-	if dbErr := msql.QueryRow(db, "SELECT username_lc FROM users WHERE username_lc = ?", NobodyUserUsername).Scan(&s); dbErr != nil {
-		if dbErr == sql.ErrNoRows {
+	var row struct {
+		UsernameLC string
+	}
+	if dbErr := db.Table("users").Select("username_lc").Where("username_lc = ?", NobodyUserUsername).Take(&row).Error; dbErr != nil {
+		if errors.Is(dbErr, gorm.ErrRecordNotFound) {
 			// Ghost user not found; create one.
 			user, err := RegisterUser(context.Background(), db, NobodyUserUsername, "", utils.GenerateStringID(48), "")
 			if err != nil {
@@ -1434,21 +1420,25 @@ func CalcGhostUserID(user uid.ID, unique string) string {
 }
 
 func UserDeleted(db *gorm.DB, user uid.ID) (bool, error) {
-	var deletedAt msql.NullTime
-	if err := msql.QueryRow(db, "SELECT deleted_at FROM users WHERE id = ?", user).Scan(&deletedAt); err != nil {
-		if err == sql.ErrNoRows {
+	var row struct {
+		DeletedAt msql.NullTime
+	}
+	if err := db.Table("users").Select("deleted_at").Where("id = ?", user).Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, errUserNotFound
 		}
 		return false, err
 	}
-	return deletedAt.Valid, nil
+	return row.DeletedAt.Valid, nil
 }
 
 // UserMuted reports whether the user muted is muted by the user muter.
 func UserMuted(ctx context.Context, db *gorm.DB, muter, muted uid.ID) (bool, error) {
-	var rowID int
-	if err := msql.QueryRow(db, "SELECT id FROM muted_users WHERE user_id = ? AND muted_user_id = ?", muter, muted).Scan(&rowID); err != nil {
-		if err == sql.ErrNoRows {
+	var row struct {
+		ID int
+	}
+	if err := db.WithContext(ctx).Table("muted_users").Select("id").Where("user_id = ? AND muted_user_id = ?", muter, muted).Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
 		}
 		return false, fmt.Errorf("UserMuted db error: %w", err)
@@ -1457,20 +1447,15 @@ func UserMuted(ctx context.Context, db *gorm.DB, muter, muted uid.ID) (bool, err
 }
 
 func GetUsers(ctx context.Context, db *gorm.DB, limit int, next *string, viewer *uid.ID) ([]*User, *string, error) {
-	where, args := "", []any{}
+	query := buildSelectUserQuery(ctx, db)
 	if next != nil {
 		nextID, err := uid.FromString(*next)
 		if err != nil {
 			return nil, nil, errors.New("invalid next for site users")
 		}
-		where = "WHERE users.id <= ? "
-		args = append(args, nextID)
+		query = query.Where("users.id <= ?", nextID)
 	}
-
-	where += "ORDER BY users.id DESC LIMIT ?"
-	args = append(args, limit+1)
-
-	rows, err := msql.QueryContext(ctx, db, buildSelectUserQuery(where), args...)
+	rows, err := query.Order("users.id DESC").Limit(limit + 1).Rows()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1491,20 +1476,15 @@ func GetUsers(ctx context.Context, db *gorm.DB, limit int, next *string, viewer 
 }
 
 func GetAllUserIDs(ctx context.Context, db *gorm.DB, fetchDeleted, fetchBanned bool) ([]uid.ID, error) {
-	var where string
+	query := db.WithContext(ctx).Table("users").Select("id")
 	if !fetchDeleted {
-		where = "WHERE deleted_at IS NULL "
+		query = query.Where("deleted_at IS NULL")
 	}
 	if !fetchBanned {
-		if where == "" {
-			where = "WHERE "
-		} else {
-			where += "AND "
-		}
-		where += "banned_at IS NULL"
+		query = query.Where("banned_at IS NULL")
 	}
 
-	rows, err := msql.QueryContext(ctx, db, fmt.Sprintf("SELECT id FROM users %s", where))
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, err
 	}

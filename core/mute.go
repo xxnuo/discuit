@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	msql "github.com/discuitnet/discuit/internal/sql"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/uid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type MuteType string
@@ -96,22 +97,21 @@ func GetMutes(ctx context.Context, db *gorm.DB, user uid.ID) ([]*Mute, error) {
 }
 
 func GetMutedCommunities(ctx context.Context, db *gorm.DB, user uid.ID, fetchCommunities bool) ([]*Mute, error) {
-	rows, err := msql.QueryContext(ctx, db, "SELECT id, community_id, created_at FROM muted_communities WHERE user_id = ? ORDER BY id", user)
+	var rows []idb.MutedCommunity
+	err := db.WithContext(ctx).Order("id").Where("user_id = ?", user).Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-
 	var mutes []*Mute
-	for rows.Next() {
-		mute := &Mute{User: user, Type: MuteTypeCommunity}
-		if err := rows.Scan(&mute.ID, &mute.MutedCommunityID, &mute.CreatedAt); err != nil {
-			return nil, err
-		}
-		mutes = append(mutes, mute)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
+	for _, row := range rows {
+		communityID := row.CommunityID.Raw()
+		mutes = append(mutes, &Mute{
+			ID:               int(row.ID),
+			User:             user,
+			Type:             MuteTypeCommunity,
+			MutedCommunityID: &communityID,
+			CreatedAt:        row.CreatedAt,
+		})
 	}
 
 	var ids []uid.ID
@@ -139,22 +139,21 @@ func GetMutedCommunities(ctx context.Context, db *gorm.DB, user uid.ID, fetchCom
 }
 
 func GetMutedUsers(ctx context.Context, db *gorm.DB, user uid.ID, fillUsers bool) ([]*Mute, error) {
-	rows, err := msql.QueryContext(ctx, db, "SELECT id, muted_user_id, created_at FROM muted_users WHERE user_id = ? ORDER BY id", user)
+	var rows []idb.MutedUser
+	err := db.WithContext(ctx).Order("id").Where("user_id = ?", user).Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-
 	var mutes []*Mute
-	for rows.Next() {
-		mute := &Mute{User: user, Type: MuteTypeUser}
-		if err := rows.Scan(&mute.ID, &mute.MutedUserID, &mute.CreatedAt); err != nil {
-			return nil, err
-		}
-		mutes = append(mutes, mute)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
+	for _, row := range rows {
+		mutedUserID := row.MutedUserID.Raw()
+		mutes = append(mutes, &Mute{
+			ID:          int(row.ID),
+			User:        user,
+			Type:        MuteTypeUser,
+			MutedUserID: &mutedUserID,
+			CreatedAt:   row.CreatedAt,
+		})
 	}
 
 	var ids []uid.ID
@@ -188,9 +187,9 @@ func Unmute(ctx context.Context, db *gorm.DB, user uid.ID, id string) error {
 
 	switch mType {
 	case MuteTypeCommunity:
-		_, err = msql.ExecContext(ctx, db, "delete from muted_communities where id = ? and user_id = ?", idInt, user)
+		err = db.WithContext(ctx).Where("id = ? AND user_id = ?", idInt, user).Delete(&idb.MutedCommunity{}).Error
 	case MuteTypeUser:
-		_, err = msql.ExecContext(ctx, db, "delete from muted_users where id = ? and user_id = ?", idInt, user)
+		err = db.WithContext(ctx).Where("id = ? AND user_id = ?", idInt, user).Delete(&idb.MutedUser{}).Error
 	}
 	return err
 }
@@ -199,28 +198,32 @@ func Unmute(ctx context.Context, db *gorm.DB, user uid.ID, id string) error {
 // the community or the user mutes.
 func ClearMutes(ctx context.Context, db *gorm.DB, user uid.ID, t MuteType) (err error) {
 	if t == "" || t == MuteTypeCommunity {
-		_, err = msql.ExecContext(ctx, db, "DELETE FROM muted_communities WHERE user_id = ?", user)
+		err = db.WithContext(ctx).Where("user_id = ?", user).Delete(&idb.MutedCommunity{}).Error
 		if err != nil {
 			return
 		}
 	}
 	if t == "" || t == MuteTypeUser {
-		_, err = msql.ExecContext(ctx, db, "DELETE FROM muted_users where user_id = ?", user)
+		err = db.WithContext(ctx).Where("user_id = ?", user).Delete(&idb.MutedUser{}).Error
 	}
 	return
 }
 
 func MuteCommunity(ctx context.Context, db *gorm.DB, user, community uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "INSERT INTO muted_communities (user_id, community_id) VALUES (?, ?)", user, community)
-	if err != nil && msql.IsErrDuplicateErr(err) {
-		return nil
-	}
-	return err
+	return db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&idb.MutedCommunity{
+			UserID:      idb.UIDFrom(user),
+			CommunityID: idb.UIDFrom(community),
+		}).
+		Error
 }
 
 func UnmuteCommunity(ctx context.Context, db *gorm.DB, user, community uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "DELETE FROM muted_communities WHERE user_id = ? AND community_id = ?", user, community)
-	return err
+	return db.WithContext(ctx).
+		Where("user_id = ? AND community_id = ?", user, community).
+		Delete(&idb.MutedCommunity{}).
+		Error
 }
 
 func MuteUser(ctx context.Context, db *gorm.DB, user, mutedUser uid.ID) error {
@@ -230,14 +233,18 @@ func MuteUser(ctx context.Context, db *gorm.DB, user, mutedUser uid.ID) error {
 		return ErrUserDeleted
 	}
 
-	_, err := msql.ExecContext(ctx, db, "INSERT INTO muted_users (user_id, muted_user_id) VALUES (?, ?)", user, mutedUser)
-	if err != nil && msql.IsErrDuplicateErr(err) {
-		return nil
-	}
-	return err
+	return db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&idb.MutedUser{
+			UserID:      idb.UIDFrom(user),
+			MutedUserID: idb.UIDFrom(mutedUser),
+		}).
+		Error
 }
 
 func UnmuteUser(ctx context.Context, db *gorm.DB, user, mutedUser uid.ID) error {
-	_, err := msql.ExecContext(ctx, db, "DELETE FROM muted_users WHERE user_id = ? AND muted_user_id = ?", user, mutedUser)
-	return err
+	return db.WithContext(ctx).
+		Where("user_id = ? AND muted_user_id = ?", user, mutedUser).
+		Delete(&idb.MutedUser{}).
+		Error
 }
