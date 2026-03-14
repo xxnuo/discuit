@@ -2,12 +2,12 @@ FROM golang:1.23 AS backend-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libvips-dev && \
-    libvips=8.8.4 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+ARG TARGETARCH
 ENV GOOS=linux
-ENV GOARCH=arm64
+ENV GOARCH=${TARGETARCH}
 
 WORKDIR /app
 COPY go.* ./
@@ -27,7 +27,7 @@ COPY --from=backend-builder /app/discuit /app/discuit
 WORKDIR /app/ui
 COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
-COPY ui/ . 
+COPY ui/ .
 
 FROM node:18
 ENV DEBIAN_FRONTEND=noninteractive
@@ -36,14 +36,13 @@ RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
 RUN apt-get update && apt-get install -y --no-install-recommends \
     redis-server \
     libvips-dev && \
-    libvips=8.8.4 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=frontend-builder /app/ui /app/ui
 COPY --from=backend-builder /app/discuit /app/discuit
 COPY config.default.yaml /app/config.yaml
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /app

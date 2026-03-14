@@ -1,8 +1,6 @@
-version: "3"
-
 services:
   discuit:
-    # build: .
+    build: .
     image: discuit
     restart: unless-stopped
     ports:

@@ -1,5 +1,7 @@
 node_modules
 .vscode
+.git
+.github
 /ui/dist/
 /config.yaml
 /ui-config.yaml
@@ -7,4 +9,5 @@ node_modules
 /cookies
 /logs
 /discuit
+/discuit.db
 /images

@@ -15,7 +15,10 @@ FRONTEND_PORT ?=
 BACKEND_PORT_SEED := 38180
 FRONTEND_PORT_SEED := 45173
 
-.PHONY: dev dev-ui dev-server build build-ui build-server ensure-config ensure-ports migrate prepare-dev
+IMAGE_NAME ?= discuit
+IMAGE_TAG ?= latest
+
+.PHONY: dev dev-ui dev-server build build-ui build-server ensure-config ensure-ports migrate prepare-dev docker docker-up docker-down
 
 dev: ensure-config ensure-ports migrate $(UI_DEPS_STAMP)
 	backend_port='$(BACKEND_PORT)'; \
@@ -85,3 +88,12 @@ prepare-dev:
 		echo "Creating Redis container..."; \
 		docker run -d --name discuit-redis -p 6379:6379 redis:alpine; \
 	fi
+
+docker:
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
