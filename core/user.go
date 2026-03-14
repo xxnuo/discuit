@@ -33,7 +33,6 @@ const (
 	minUsernameLength = 3
 
 	maxPasswordLength = 72 // in bytes (limit set by bcrypt)
-	minPasswordLength = 8
 
 	maxUserProfileAboutLength = 10000
 	maxHiddenPosts            = 1000 // per user
@@ -214,9 +213,6 @@ func trimPassword(password []byte) []byte {
 func HashPassword(password []byte) ([]byte, error) {
 	if len(password) == 0 {
 		return nil, httperr.NewBadRequest("invalid-password", "Password empty.")
-	}
-	if len(password) < minPasswordLength {
-		return nil, httperr.NewBadRequest("invalid-password", "Password too short.")
 	}
 
 	password = trimPassword(password)

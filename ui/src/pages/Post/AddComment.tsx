@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { Link } from 'react-router-dom';
 import MarkdownTextarea from '../../components/MarkdownTextarea';
@@ -50,6 +51,7 @@ const AddComment = ({
   textSelection = '',
 }: AddCommentProps) => {
   const dispatch = useDispatch();
+  const { t } = useTranslation(['common', 'comment']);
 
   const [body, setBody] = useState(appendTextSelection(commentBody, textSelection));
   const empty = body.length === 0;
@@ -76,7 +78,7 @@ const AddComment = ({
 
   const handleSubmit = async () => {
     if (empty) {
-      dispatch(snackAlert('Message body cannot be empty.'));
+      dispatch(snackAlert(t('comment:bodyEmpty')));
       return;
     }
     setSendingRequest(true);
@@ -100,7 +102,7 @@ const AddComment = ({
         if (res.status === 403) {
           const json = await res.json();
           if (json.code === 'banned_from_community') {
-            alert('You are banned from this community.');
+            alert(t('comment:bannedFromCommunity'));
             dispatch(bannedFromAdded(post.communityId));
             return;
           }
@@ -152,7 +154,7 @@ const AddComment = ({
         name=""
         id=""
         rows={3}
-        placeholder="Add a new comment"
+        placeholder={t('comment:placeholder')}
         value={body}
         onClick={handleTextareaClick}
         disabled={disabled || sendingRequest}
@@ -170,13 +172,13 @@ const AddComment = ({
           </Link>
           <AsUser isMod={isMod} disabled={sendingRequest} onChange={(g) => setUserGroup(g)} />
           <div className="post-comments-new-buttons-buttons">
-            <button onClick={handleCancel}>Cancel</button>
+            <button onClick={handleCancel}>{t('common:cancel')}</button>
             <button
               className="button-main"
               onClick={handleSubmit}
               disabled={empty || sendingRequest}
             >
-              {editing ? 'Update comment' : 'Add comment'}
+              {editing ? t('comment:updateComment') : t('comment:addComment')}
             </button>
           </div>
         </div>

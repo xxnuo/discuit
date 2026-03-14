@@ -20,13 +20,13 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
   const handleLoginSubmit: React.FormEventHandler = async (event) => {
     event.preventDefault();
     if (username === '' && password === '') {
-      setLoginError(t('auth.usernameAndPasswordEmpty'));
+      setLoginError(t('auth:usernameAndPasswordEmpty'));
       return;
     } else if (username === '') {
-      setLoginError(t('auth.usernameEmptyShort'));
+      setLoginError(t('auth:usernameEmptyShort'));
       return;
     } else if (password === '') {
-      setLoginError(t('auth.passwordEmptyShort'));
+      setLoginError(t('auth:passwordEmptyShort'));
       return;
     }
     try {
@@ -41,11 +41,11 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
         window.location.reload();
       } else {
         if (res.status === 401) {
-          setLoginError(t('auth.usernamePasswordNoMatch'));
+          setLoginError(t('auth:usernamePasswordNoMatch'));
         } else if (res.status === 403) {
           const json = await res.json();
           if (json.code === 'account_suspended') {
-            setLoginError(t('auth.accountSuspended', { username }));
+            setLoginError(t('auth:accountSuspended', { username }));
           } else {
             throw new APIError(res.status, json);
           }
@@ -98,7 +98,7 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
       <FormField className="is-submit">
         <input type="submit" className="button button-main" value={t('common.login')} />
         <button className="button-link" onClick={handleOnSignup}>
-          {t('auth.noAccountSignup')}
+          {t('auth:noAccountSignup')}
         </button>
       </FormField>
     </Form>

@@ -12,3 +12,5 @@ node_modules
 /images
 .secrets
 *.db
+*.db-shm
+*.db-wal

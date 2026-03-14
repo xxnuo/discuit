@@ -36,7 +36,7 @@ const DeleteAccount = ({ user }: { user: User }) => {
         }
         throw new APIError(res.status, await res.json());
       }
-      alert(t('deleteAccount.success'));
+      alert(t('settings:deleteAccount.success'));
       // Send the user to the home page.
       window.location.href = window.location.origin;
     } catch (error) {
@@ -47,22 +47,22 @@ const DeleteAccount = ({ user }: { user: User }) => {
   return (
     <>
       <button className="button-red" onClick={() => setOpen(true)}>
-        {t('deleteAccount.button')}
+        {t('settings:deleteAccount.button')}
       </button>
       <Modal open={open} onClose={handleClose}>
         <div className="modal-card">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('deleteAccount.title')}</div>
+            <div className="modal-card-title">{t('settings:deleteAccount.title')}</div>
             <ButtonClose onClick={handleClose} />
           </div>
           <div className="form modal-card-content">
             <div className="form-field">
-              <p>{t('deleteAccount.warning')}</p>
+              <p>{t('settings:deleteAccount.warning')}</p>
             </div>
-            <FormField label={t('deleteAccount.passwordLabel')} error={passwordError ? t('deleteAccount.invalidPassword') : undefined}>
+            <FormField label={t('settings:deleteAccount.passwordLabel')} error={passwordError ? t('settings:deleteAccount.invalidPassword') : undefined}>
               <InputPassword value={password} onChange={(e) => setPassword(e.target.value)} />
             </FormField>
-            <FormField label={t('deleteAccount.confirmLabel')}>
+            <FormField label={t('settings:deleteAccount.confirmLabel')}>
               <Input type="text" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </FormField>
           </div>

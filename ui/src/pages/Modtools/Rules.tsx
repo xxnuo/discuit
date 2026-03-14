@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { ButtonClose } from '../../components/Button';
 import DashboardPage from '../../components/Dashboard/DashboardPage';
@@ -12,6 +13,7 @@ import { snackAlertError } from '../../slices/mainSlice';
 
 const Rules = ({ community }: { community: Community }) => {
   const dispatch = useDispatch();
+  const { t } = useTranslation(['modtools', 'common']);
   const [rules, _setRules] = useState<CommunityRule[]>([]);
   const setRules = (rules: CommunityRule[]) => {
     _setRules(rules.sort((a, b) => a.zIndex - b.zIndex));
@@ -86,7 +88,7 @@ const Rules = ({ community }: { community: Community }) => {
   };
 
   const handleDeleteRule = async (rule: CommunityRule) => {
-    if (confirm('Are you certain?')) {
+    if (confirm(t('areYouCertain'))) {
       try {
         await mfetchjson(`/api/communities/${community.id}/rules/${rule.id}`, {
           method: 'DELETE',
@@ -102,17 +104,17 @@ const Rules = ({ community }: { community: Community }) => {
     return null;
   }
 
-  const modalTitle = isEditRule ? 'Edit rule' : 'Add rule';
+  const modalTitle = isEditRule ? t('editRule') : t('addRule');
   const modalDisabled = rule === '';
 
   return (
     <DashboardPage
       className="modtools-content modtools-rules"
-      title="Rules"
+      title={t('rules')}
       fullWidth
       titleRightContent={
         <button className="button-main" onClick={handleAddRule}>
-          Add rule
+          {t('addRule')}
         </button>
       }
     >
@@ -129,10 +131,10 @@ const Rules = ({ community }: { community: Community }) => {
               if (!modalDisabled) handleSave();
             }}
           >
-            <FormField label="Rule">
+            <FormField label={t('rule')}>
               <InputWithCount maxLength={ruleMaxLength} value={rule} onChange={setRule} autoFocus />
             </FormField>
-            <FormField label="Description">
+            <FormField label={t('common:descriptionLabel')}>
               <InputWithCount
                 textarea
                 rows={5}
@@ -145,9 +147,9 @@ const Rules = ({ community }: { community: Community }) => {
           </form>
           <div className="modal-card-actions">
             <button className="button-main" disabled={modalDisabled} onClick={handleSave}>
-              Save
+              {t('common:save')}
             </button>
-            <button onClick={handleEditClose}>Cancel</button>
+            <button onClick={handleEditClose}>{t('common:cancel')}</button>
           </div>
         </div>
       </Modal>
@@ -160,11 +162,11 @@ const Rules = ({ community }: { community: Community }) => {
               <div className="table-column">{rule.description}</div>
               <div className="table-column" style={{ display: 'flex', justifyContent: 'center' }}>
                 <button className="button-red" onClick={() => handleDeleteRule(rule)}>
-                  Delete
+                  {t('common:delete')}
                 </button>
               </div>
               <div className="table-column">
-                <button onClick={() => handleEditRule(rule)}>Edit</button>
+                <button onClick={() => handleEditRule(rule)}>{t('edit')}</button>
               </div>
             </div>
           ))}

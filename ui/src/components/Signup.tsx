@@ -34,7 +34,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
         }
         throw new APIError(res.status, await res.json());
       }
-      setUsernameError(t('auth.usernameTaken', { username }));
+      setUsernameError(t('auth:usernameTaken', { username }));
       return true;
     } catch (error) {
       dispatch(snackAlertError(error));
@@ -95,31 +95,31 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
     let errFound = false;
     if (!username) {
       errFound = true;
-      setUsernameError(t('auth.usernameEmpty'));
+      setUsernameError(t('auth:usernameEmpty'));
     } else if (username.length < 4) {
       errFound = true;
-      setUsernameError(t('auth.usernameTooShort'));
+      setUsernameError(t('auth:usernameTooShort'));
     } else if ((await checkUsernameExists()) === true) {
       errFound = true;
     }
     if (!password) {
       errFound = true;
-      setPasswordError(t('auth.passwordEmpty'));
+      setPasswordError(t('auth:passwordEmpty'));
     } else if (password.length < 8) {
       errFound = true;
-      setPasswordError(t('auth.passwordTooWeak'));
+      setPasswordError(t('auth:passwordTooWeak'));
     }
     if (!repeatPassword) {
       errFound = true;
-      setRepeatPasswordError(t('auth.repeatPasswordEmpty'));
+      setRepeatPasswordError(t('auth:repeatPasswordEmpty'));
     } else if (password !== repeatPassword) {
       errFound = true;
-      setRepeatPasswordError(t('auth.passwordsDoNotMatch'));
+      setRepeatPasswordError(t('auth:passwordsDoNotMatch'));
     }
     if (email) {
       if (!validEmail(email)) {
         errFound = true;
-        setEmailError(t('auth.invalidEmail'));
+        setEmailError(t('auth:invalidEmail'));
       }
     }
     if (errFound) {
@@ -155,12 +155,12 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
           </div>
           <Form className="modal-card-content" onSubmit={handleSubmit}>
             {signupsDisabled && (
-              <div className="modal-signup-disabled">{t('auth.signupsDisabled')}</div>
+              <div className="modal-signup-disabled">{t('auth:signupsDisabled')}</div>
             )}
             <FormField
               className="is-username"
               label={t('common.username')}
-              description={t('auth.usernameDescription')}
+              description={t('auth:usernameDescription')}
               error={usernameError || undefined}
             >
               <InputWithCount
@@ -174,8 +174,8 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
               />
             </FormField>
             <FormField
-              label={t('auth.emailOptional')}
-              description={t('auth.emailDescription')}
+              label={t('auth:emailOptional')}
+              description={t('auth:emailDescription')}
               error={emailError || undefined}
             >
               <Input
@@ -193,7 +193,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
                 disabled={signupsDisabled}
               />
             </FormField>
-            <FormField label={t('auth.repeatPassword')} error={repeatPasswordError || undefined}>
+            <FormField label={t('auth:repeatPassword')} error={repeatPasswordError || undefined}>
               <InputPassword
                 value={repeatPassword}
                 onChange={(e) => {
@@ -216,32 +216,32 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
             )}
             <FormField>
               <p className="modal-signup-terms">
-                {t('auth.agreeToTerms')}
+                {t('auth:agreeToTerms')}
                 <a target="_blank" href="/terms">
                   {t('sidebar.terms')}
                 </a>
-                {t('auth.and')}
+                {t('auth:and')}
                 <a target="_blank" href="/privacy-policy">
-                  {t('auth.privacyPolicy')}
+                  {t('auth:privacyPolicy')}
                 </a>
                 .
               </p>
               <p className="modal-signup-terms is-captcha">
-                {t('auth.captchaProtected')}
+                {t('auth:captchaProtected')}
                 <a href="https://policies.google.com/privacy-policy" target="_blank">
-                  {t('auth.captchaPrivacy')}
+                  {t('auth:captchaPrivacy')}
                 </a>{' '}
-                {t('auth.and')}{' '}
+                {t('auth:and')}{' '}
                 <a href="https://policies.google.com/terms" target="_blank">
-                  {t('auth.captchaTerms')}
+                  {t('auth:captchaTerms')}
                 </a>{' '}
-                {t('auth.captchaApply')}
+                {t('auth:captchaApply')}
               </p>
             </FormField>
             <FormField className="is-submit">
               <input type="submit" className="button button-main" value={t('common.signup')} />
               <button className="button-link" onClick={handleOnLogin} disabled={signupsDisabled}>
-                {t('auth.alreadyHaveAccount')}
+                {t('auth:alreadyHaveAccount')}
               </button>
             </FormField>
           </Form>

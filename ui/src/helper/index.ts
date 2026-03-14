@@ -11,8 +11,15 @@ export function stringCount(
   if (thingNameMultiple) {
     s += num === 1 ? thingName : thingNameMultiple;
   } else {
-    if (thingName === 'point') {
-      s += num === 1 ? i18n.t('point') : i18n.t('points');
+    const knownKeys: Record<string, string> = {
+      point: 'common:point',
+      comment: 'common:comment',
+      member: 'common:member',
+      image: 'common:image',
+    };
+    const key = knownKeys[thingName];
+    if (key) {
+      s += i18n.t(key, { count: num });
     } else {
       s += thingName;
       if (num !== 1) s += 's';
@@ -36,7 +43,7 @@ export function kRound(num: number) {
 
 export function timeAgo(date: string | Date, suffix?: string, justNow = true, short = false) {
   if (suffix === undefined) {
-    suffix = i18n.t('timeAgo.ago');
+    suffix = i18n.t('common:timeAgo.ago');
   }
   if (!(date instanceof Date)) {
     date = new Date(date);
@@ -47,26 +54,26 @@ export function timeAgo(date: string | Date, suffix?: string, justNow = true, sh
 
   if (ms < 60) {
     if (justNow) {
-      return short ? '0m' : t('timeAgo.justNow');
+      return short ? '0m' : t('common:timeAgo.justNow');
     }
     const s = Math.round(ms);
-    return `${s}${short ? 's' : ' ' + (s === 1 ? t('timeAgo.second') : t('timeAgo.seconds'))}${suffix}`;
+    return `${s}${short ? 's' : ' ' + (s === 1 ? t('common:timeAgo.second') : t('common:timeAgo.seconds'))}${suffix}`;
   } else if (ms < 3600) {
     const m = Math.round(ms / 60);
-    return `${m}${short ? 'm' : ' ' + (m === 1 ? t('timeAgo.minute') : t('timeAgo.minutes'))}${suffix}`;
+    return `${m}${short ? 'm' : ' ' + (m === 1 ? t('common:timeAgo.minute') : t('common:timeAgo.minutes'))}${suffix}`;
   } else if (ms < 24 * 3600) {
     const h = Math.round(ms / 3600);
-    return `${h}${short ? 'h' : ' ' + (h === 1 ? t('timeAgo.hour') : t('timeAgo.hours'))}${suffix}`;
+    return `${h}${short ? 'h' : ' ' + (h === 1 ? t('common:timeAgo.hour') : t('common:timeAgo.hours'))}${suffix}`;
   } else if (ms < 7 * 24 * 3600) {
     const d = Math.round(ms / (24 * 3600));
-    return `${d}${short ? 'd' : ' ' + (d === 1 ? t('timeAgo.day') : t('timeAgo.days'))}${suffix}`;
+    return `${d}${short ? 'd' : ' ' + (d === 1 ? t('common:timeAgo.day') : t('common:timeAgo.days'))}${suffix}`;
   } else if (ms < 365 * 24 * 3600) {
     const w = Math.round(ms / (24 * 3600) / 7);
-    return `${w}${short ? 'w' : ' ' + (w === 1 ? t('timeAgo.week') : t('timeAgo.weeks'))}${suffix}`;
+    return `${w}${short ? 'w' : ' ' + (w === 1 ? t('common:timeAgo.week') : t('common:timeAgo.weeks'))}${suffix}`;
   }
 
   const y = Math.floor(ms / (365 * 24 * 3600));
-  return `${y}${short ? 'y' : ' ' + (y === 1 ? t('timeAgo.year') : t('timeAgo.years'))}${suffix}`;
+  return `${y}${short ? 'y' : ' ' + (y === 1 ? t('common:timeAgo.year') : t('common:timeAgo.years'))}${suffix}`;
 }
 
 export function isScrollbarVisible() {
@@ -129,10 +136,9 @@ export function onEscapeKey<T = HTMLDivElement>(
   }
 }
 
-// Returns date in the format of '21 February 2021'.
 export function dateString1(date: string | Date): string {
   if (!(date instanceof Date)) date = new Date(date);
-  const monthKey = `months.${date.getMonth()}`;
+  const monthKey = `common:months.${date.getMonth()}`;
   return `${date.getDate()} ${i18n.t(monthKey)} ${date.getFullYear()}`;
 }
 
@@ -215,11 +221,11 @@ export function publicURL(path: string): string {
 export function userGroupSingular(type: UserGroup, long = false): string {
   switch (type) {
     case 'mods':
-      return long ? 'moderator' : 'mod';
+      return long ? i18n.t('common:userGroup.modLong') : i18n.t('common:userGroup.modShort');
     case 'admins':
-      return long ? 'admin' : 'admin';
+      return i18n.t('common:userGroup.admin');
     case 'normal':
-      return long ? 'user' : 'user';
+      return i18n.t('common:userGroup.user');
   }
 }
 

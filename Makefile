@@ -16,7 +16,7 @@ FRONTEND_PORT_SEED := 45173
 IMAGE_NAME ?= discuit
 IMAGE_TAG ?= latest
 
-.PHONY: dev dev-ui dev-server build build-ui build-server ensure-ports migrate prepare-dev docker
+.PHONY: dev dev-ui dev-server build build-ui build-server ensure-ports migrate seed prepare-dev docker
 
 dev: ensure-ports migrate $(UI_DEPS_STAMP)
 	backend_port='$(BACKEND_PORT)'; \
@@ -68,6 +68,9 @@ ensure-ports:
 
 migrate:
 	go run . migrate run
+
+seed: migrate
+	go run . seed
 
 $(UI_DEPS_STAMP): $(UI_DIR)/package.json $(UI_LOCKFILE) $(UI_CONFIG_FILE)
 	cd $(UI_DIR) && $(UI_INSTALL)

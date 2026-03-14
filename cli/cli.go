@@ -27,6 +27,7 @@ func RunCLI() {
 		Commands: []*cli.Command{
 			CommandMigrate,
 			CommandServe,
+			CommandSeed,
 			CommandAdmin,
 			CommandMod,
 			CommandHardReset,
@@ -82,6 +83,19 @@ var CommandServe = &cli.Command{
 		}
 		defer pg.Close()
 		return pg.Serve()
+	},
+}
+
+var CommandSeed = &cli.Command{
+	Name:  "seed",
+	Usage: "Generate fake data for testing",
+	Action: func(ctx *cli.Context) error {
+		pg, err := program.NewProgram(true)
+		if err != nil {
+			return err
+		}
+		defer pg.Close()
+		return pg.Seed()
 	},
 }
 

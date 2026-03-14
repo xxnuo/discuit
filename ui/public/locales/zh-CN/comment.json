@@ -1,0 +1,18 @@
+{
+  "addComment": "添加评论",
+  "updateComment": "更新评论",
+  "placeholder": "添加新评论",
+  "bodyEmpty": "评论内容不能为空。",
+  "bannedFromCommunity": "您已被此社区封禁。",
+  "reply": "回复",
+  "editComment": "编辑",
+  "deleteComment": "删除",
+  "deletedComment": "评论已删除。",
+  "hideReplies": "收起回复",
+  "showMoreReplies": "显示更多回复",
+  "showReplies": "显示 {{count}} 条回复",
+  "loadMore": "加载更多评论",
+  "sortBest": "最佳",
+  "sortNew": "最新",
+  "sortOld": "最早"
+}

@@ -56,8 +56,8 @@ const Settings = () => {
   };
 
   const homeFeedOptions = {
-    all: t('settings.homeFeedAll'),
-    subscriptions: t('settings.homeFeedSubscriptions'),
+    all: t('settings:homeFeedAll'),
+    subscriptions: t('settings:homeFeedSubscriptions'),
   };
 
   const [homeFeed, setHomeFeed] = useState(user.homeFeed);
@@ -70,8 +70,8 @@ const Settings = () => {
   const [requireAltText, setRequireAltText] = useState(user.requireAltText);
 
   const fontOptions = {
-    custom: t('settings.fontCustom'),
-    system: t('settings.fontSystem'),
+    custom: t('settings:fontCustom'),
+    system: t('settings:fontSystem'),
   };
 
   // Per-device preferences:
@@ -143,7 +143,7 @@ const Settings = () => {
 
   const handleSave = async () => {
     if (email !== '' && !validEmail(email)) {
-      dispatch(snackAlert(t('settings.validEmailRequired')));
+      dispatch(snackAlert(t('settings:validEmailRequired')));
       return;
     }
     // Save device preferences first:
@@ -172,7 +172,7 @@ const Settings = () => {
         }),
       });
       dispatch(userLoggedIn(ruser));
-      dispatch(snackAlert(t('settings.settingsSaved'), 'settings_saved'));
+      dispatch(snackAlert(t('settings:settingsSaved'), 'settings_saved'));
       resetChanged();
       dispatch(settingsChanged());
     } catch (error) {
@@ -225,7 +225,7 @@ const Settings = () => {
 
   const handleSaveProfilePicAlt = async (altText: string) => {
     try {
-      if (!user.proPic) return dispatch(snackAlert(t('settings.noProfilePicture')));
+      if (!user.proPic) return dispatch(snackAlert(t('settings:noProfilePicture')));
       const proPicId = user.proPic.id;
       await mfetchjson(`/api/images/${proPicId}`, {
         method: 'PUT',
@@ -233,7 +233,7 @@ const Settings = () => {
       });
 
       user.proPic.altText = altText;
-      dispatch(snackAlert(t('settings.altTextSaved')));
+      dispatch(snackAlert(t('settings:altTextSaved')));
       setProfilePicModalOpen(false);
     } catch (error) {
       dispatch(snackAlertError(error));
@@ -319,27 +319,27 @@ const Settings = () => {
   return (
     <div className="page-content wrap page-settings">
       <Helmet>
-        <title>{t('settings.title')}</title>
+        <title>{t('settings:title')}</title>
       </Helmet>
       <div className="form account-settings card">
-        <h1>{t('settings.accountSettings')}</h1>
+        <h1>{t('settings:accountSettings')}</h1>
         <FormSection>
           <FormSection>
             <div className="settings-propic">
               <CommunityProPic name={user.username} proPic={user.proPic} size="standard" />
-              <button onClick={() => setProfilePicModalOpen(true)}>{t('settings.editProfilePicture')}</button>
+              <button onClick={() => setProfilePicModalOpen(true)}>{t('settings:editProfilePicture')}</button>
             </div>
           </FormSection>
-          <FormField label={t('common.username')} description={t('settings.usernameCannotChange')}>
+          <FormField label={t('common.username')} description={t('settings:usernameCannotChange')}>
             <Input value={user.username || ''} disabled />
           </FormField>
           <FormField label={t('common.email')}>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </FormField>
-          <FormField label={t('settings.aboutMe')}>
+          <FormField label={t('settings:aboutMe')}>
             <textarea
               rows={5}
-              placeholder={t('settings.aboutMePlaceholder')}
+              placeholder={t('settings:aboutMePlaceholder')}
               value={aboutMe}
               onChange={(e) => setAboutMe(e.target.value)}
             />
@@ -351,8 +351,8 @@ const Settings = () => {
             <DeleteAccount user={user} />
           </FormField>
         </FormSection>
-        <FormSection heading={t('settings.preferences')}>
-          <FormField className="is-preference" label={t('settings.homeFeed')}>
+        <FormSection heading={t('settings:preferences')}>
+          <FormField className="is-preference" label={t('settings:homeFeed')}>
             <Dropdown
               aligned="right"
               target={<button className="select-bar-dp-target">{homeFeedOptions[homeFeed]}</button>}
@@ -374,14 +374,14 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings.rememberFeedSort')}
+              label={t('settings:rememberFeedSort')}
               checked={rememberFeedSort}
               onChange={(e) => setRememberFeedSort(e.target.checked)}
             />
           </FormField>
           <FormField className="is-preference is-switch">
             <Checkbox
-              label={t('settings.enableEmbeds')}
+              label={t('settings:enableEmbeds')}
               variant="switch"
               checked={enableEmbeds}
               onChange={(e) => setEnableEmbeds(e.target.checked)}
@@ -390,7 +390,7 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings.showUserProfilePictures')}
+              label={t('settings:showUserProfilePictures')}
               checked={showUserProfilePictures}
               onChange={(e) => setShowUserProfilePictures(e.target.checked)}
             />
@@ -398,14 +398,14 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings.requireAltText')}
+              label={t('settings:requireAltText')}
               checked={requireAltText}
               onChange={(e) => setRequireAltText(e.target.checked)}
             />
           </FormField>
         </FormSection>
-        <FormSection heading={t('settings.devicePreferences')}>
-          <FormField className="is-preference" label={t('settings.font')}>
+        <FormSection heading={t('settings:devicePreferences')}>
+          <FormField className="is-preference" label={t('settings:font')}>
             <Dropdown
               aligned="right"
               target={<button className="select-bar-dp-target">{fontOptions[font]}</button>}
@@ -425,7 +425,7 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings.enableInfiniteScrolling')}
+              label={t('settings:enableInfiniteScrolling')}
               checked={!infiniteScrollingDisabed}
               onChange={(e) => setInfinitedScrollingDisabled(!e.target.checked)}
             />
@@ -434,15 +434,15 @@ const Settings = () => {
             <FormField className="is-preference is-switch">
               <Checkbox
                 variant="switch"
-                label={t('settings.autoHideTopNavbar')}
+                label={t('settings:autoHideTopNavbar')}
                 checked={!topNavbarAutohideDisabled}
                 onChange={(e) => setTopNavbarAutohideDisabled(!e.target.checked)}
               />
             </FormField>
           )}
         </FormSection>
-        <FormSection heading={t('settings.language')}>
-          <FormField className="is-preference" label={t('settings.language')}>
+        <FormSection heading={t('settings:language')}>
+          <FormField className="is-preference" label={t('settings:language')}>
             <Dropdown
               aligned="right"
               target={<button className="select-bar-dp-target">{i18n.language === 'zh' ? '中文' : 'English'}</button>}
@@ -462,11 +462,11 @@ const Settings = () => {
             </Dropdown>
           </FormField>
         </FormSection>
-        <FormSection heading={t('settings.notifications')}>
+        <FormSection heading={t('settings:notifications')}>
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings.enableUpvoteNotifications')}
+              label={t('settings:enableUpvoteNotifications')}
               checked={notifsSettings.upvoteNotifs}
               onChange={(e) => setNotifsSettings('upvoteNotifs', e.target.checked)}
             />
@@ -474,7 +474,7 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings.enableReplyNotifications')}
+              label={t('settings:enableReplyNotifications')}
               checked={notifsSettings.replyNotifs}
               onChange={(e) => setNotifsSettings('replyNotifs', e.target.checked)}
             />
@@ -482,12 +482,12 @@ const Settings = () => {
           {canEnableWebPushNotifications && (
             <FormField>
               <button onClick={handleEnablePushNotifications} style={{ alignSelf: 'flex-start' }}>
-                {t('settings.enablePushNotifications')}
+                {t('settings:enablePushNotifications')}
               </button>
             </FormField>
           )}
         </FormSection>
-        <FormSection heading={t('settings.mutedCommunities')}>
+        <FormSection heading={t('settings:mutedCommunities')}>
           <div className="mutes-list">
             {communityMutes.length === 0 && <div>{t('common.none')}</div>}
             {communityMutes.map((mute) => renderMute(mute))}
@@ -501,7 +501,7 @@ const Settings = () => {
             )}
           </div>
         </FormSection>
-        <FormSection heading={t('settings.mutedUsers')}>
+        <FormSection heading={t('settings:mutedUsers')}>
           <div className="mutes-list">
             {userMutes.length === 0 && <div>{t('common.none')}</div>}
             {userMutes.map((mute) => renderMute(mute))}
@@ -527,7 +527,7 @@ const Settings = () => {
       <ImageEditModal
         open={profilePicModalOpen}
         onClose={() => setProfilePicModalOpen(false)}
-        title={t('settings.editProfilePicture')}
+        title={t('settings:editProfilePicture')}
         imageUrl={user.proPic ? selectImageCopyURL('medium', user.proPic) : undefined}
         altText={user.proPic?.altText}
         onUpload={handleUploadProfilePic}

@@ -100,9 +100,9 @@ const AllCommunities = () => {
 
   const renderSortDropdown = () => {
     const sortOptions = {
-      new: t('communities.latest'),
-      old: t('communities.oldest'),
-      size: t('communities.popular'),
+      new: t('community:communities.latest'),
+      old: t('community:communities.oldest'),
+      size: t('community:communities.popular'),
       name_asc: 'A-Z',
       name_dsc: 'Z-A',
     };
@@ -133,7 +133,7 @@ const AllCommunities = () => {
       <Sidebar />
       <main>
         <div className="page-comms-header card card-padding">
-          <div className="left">{isSearching ? renderSearchBox() : <h1>{t('communities.allCommunities')}</h1>}</div>
+          <div className="left">{isSearching ? renderSearchBox() : <h1>{t('community:communities.allCommunities')}</h1>}</div>
           <div className="right">
             <Button
               className={clsx('comms-search-button', !isSearching && 'is-search-svg')}
@@ -179,10 +179,10 @@ const CommunityCreationCard = () => {
   const { t } = useTranslation();
   return (
     <div className="card card-sub card-padding home-welcome">
-      <div className="home-welcome-join">{t('communities.newCommunities')}</div>
-      <div className="home-welcome-subtext">{t('communities.prepareText', { method: t('communities.byClickingButton') })}</div>
+      <div className="home-welcome-join">{t('community:communities.newCommunities')}</div>
+      <div className="home-welcome-subtext">{t('community:communities.prepareText', { method: t('community:communities.byClickingButton') })}</div>
       <div className="home-welcome-buttons">
-        <RequestCommunityButton className="button-main">{t('communities.requestCommunity')}</RequestCommunityButton>
+        <RequestCommunityButton className="button-main">{t('community:communities.requestCommunity')}</RequestCommunityButton>
       </div>
     </div>
   );
@@ -225,7 +225,7 @@ const RequestCommunityButton = ({
 
   const handleSubmit = async () => {
     if (name.length < 3) {
-      alert(t('communities.nameTooShort'));
+      alert(t('community:communities.nameTooShort'));
       return;
     }
     try {
@@ -237,7 +237,7 @@ const RequestCommunityButton = ({
         }),
       });
       if (res.ok) {
-        dispatch(snackAlert(t('communities.requested')));
+        dispatch(snackAlert(t('community:communities.requested')));
         handleClose();
       } else {
           const error = await res.json();
@@ -253,12 +253,12 @@ const RequestCommunityButton = ({
       <Modal open={open} onClose={handleClose}>
         <div className="modal-card modal-form modal-request-comm">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('communities.requestCommunityTitle')}</div>
+            <div className="modal-card-title">{t('community:communities.requestCommunityTitle')}</div>
             <ButtonClose onClick={handleClose} />
           </div>
           <div className="form modal-card-content flex-column inner-gap-1">
-            <div className="form-field">{isMobile && <p>{t('communities.prepareText', { method: t('communities.byFillingForm') })}</p>}</div>
-            <FormField label={t('communities.communityName')} description={t('communities.communityNameCannotChange')}>
+            <div className="form-field">{isMobile && <p>{t('community:communities.prepareText', { method: t('community:communities.byFillingForm') })}</p>}</div>
+            <FormField label={t('community:communities.communityName')} description={t('community:communities.communityNameCannotChange')}>
               <InputWithCount
                 value={name}
                 onChange={handleNameChange}
@@ -267,7 +267,7 @@ const RequestCommunityButton = ({
                 autoFocus
               />
             </FormField>
-            <FormField label={t('communities.note')} description={t('communities.noteDescription')}>
+            <FormField label={t('community:communities.note')} description={t('community:communities.noteDescription')}>
               <InputWithCount
                 value={note}
                 onChange={handleNoteChange}
@@ -283,7 +283,7 @@ const RequestCommunityButton = ({
             )}
             <FormField>
               <button className="button-main" onClick={handleSubmit} style={{ width: '100%' }}>
-                {t('communities.requestCommunityTitle')}
+                {t('community:communities.requestCommunityTitle')}
               </button>
             </FormField>
           </div>
@@ -335,7 +335,7 @@ const ListItem = React.memo(function ListItem({ community }: { community: Commun
           </a>
           <JoinButton className="comms-list-item-join" community={community} />
         </div>
-        <div className="comms-list-item-count">{t('communities.members', { count: community.noMembers })}</div>
+        <div className="comms-list-item-count">{t('community:communities.members', { count: community.noMembers })}</div>
         <div className="comms-list-item-about">
           <ShowMoreBox maxHeight="120px" childrenHash={community.about || ''}>
             <MarkdownBody>{community.about}</MarkdownBody>

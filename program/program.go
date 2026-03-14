@@ -161,7 +161,12 @@ func (pg *Program) Serve() error {
 		return fmt.Errorf("error creating sentinel users: %w", err)
 	}
 
-	// Create the default badges:
+	if pg.conf.IsDevelopment {
+		if err := pg.createDevAdminUser(); err != nil {
+			log.Printf("Error creating dev admin user: %v\n", err)
+		}
+	}
+
 	if err := core.NewBadgeType(pg.db, "supporter"); err != nil {
 		return fmt.Errorf("error creating 'supporter' user badge: %w", err)
 	}
@@ -558,5 +563,186 @@ func (pg *Program) AddAllUsersToCommunity(community string) error {
 		return fmt.Errorf("failed to add all users to %s: %w", community, err)
 	}
 	log.Printf("All users added to %s\n", community)
+	return nil
+}
+
+func (pg *Program) createDevAdminUser() error {
+	const username = "test"
+	const password = "test"
+
+	_, err := core.GetUserByUsername(pg.ctx, pg.db, username, nil)
+	if err == nil {
+		return nil
+	}
+
+	user, err := core.RegisterUser(pg.ctx, pg.db, username, "", password, "")
+	if err != nil {
+		return fmt.Errorf("failed to register dev admin user: %w", err)
+	}
+
+	if _, err := core.MakeAdmin(pg.ctx, pg.db, user.Username, true); err != nil {
+		return fmt.Errorf("failed to make dev admin user: %w", err)
+	}
+
+	log.Printf("Dev admin user '%s' created (password: '%s')\n", username, password)
+	return nil
+}
+
+func (pg *Program) Seed() error {
+	if err := pg.createSentinelUsers(); err != nil {
+		return fmt.Errorf("error creating sentinel users: %w", err)
+	}
+	if err := pg.createDevAdminUser(); err != nil {
+		return err
+	}
+
+	adminUser, err := core.GetUserByUsername(pg.ctx, pg.db, "test", nil)
+	if err != nil {
+		return fmt.Errorf("failed to get admin user: %w", err)
+	}
+
+	communityDefs := []struct {
+		name  string
+		about string
+	}{
+		{"General", "General discussion about anything and everything."},
+		{"Technology", "News and discussions about technology, gadgets, and software."},
+		{"Gaming", "Discuss your favorite games, share tips, and find teammates."},
+		{"Science", "Scientific discoveries, research, and discussions."},
+		{"Music", "Share and discuss music of all genres."},
+		{"Movies", "Movie reviews, recommendations, and discussions."},
+		{"Sports", "All things sports - scores, highlights, and discussions."},
+		{"Food", "Recipes, restaurant reviews, and food photography."},
+		{"Travel", "Travel stories, tips, and destination recommendations."},
+		{"Art", "Share and appreciate art in all its forms."},
+	}
+
+	var communityIDs []struct {
+		id   uid.ID
+		name string
+	}
+	for _, cd := range communityDefs {
+		comm, err := core.CreateCommunity(pg.ctx, pg.db, adminUser.ID, 0, 999, cd.name, cd.about)
+		if err != nil {
+			log.Printf("Community '%s' may already exist, skipping: %v\n", cd.name, err)
+			existing, getErr := core.GetCommunityByName(pg.ctx, pg.db, cd.name, nil)
+			if getErr != nil {
+				continue
+			}
+			communityIDs = append(communityIDs, struct {
+				id   uid.ID
+				name string
+			}{existing.ID, existing.Name})
+			continue
+		}
+		communityIDs = append(communityIDs, struct {
+			id   uid.ID
+			name string
+		}{comm.ID, comm.Name})
+		log.Printf("Created community: %s\n", cd.name)
+	}
+
+	userDefs := []string{"alice", "bob", "charlie", "diana", "eve", "frank", "grace", "henry"}
+	var userIDs []uid.ID
+	userIDs = append(userIDs, adminUser.ID)
+
+	for _, username := range userDefs {
+		user, err := core.RegisterUser(pg.ctx, pg.db, username, "", username, "")
+		if err != nil {
+			existing, getErr := core.GetUserByUsername(pg.ctx, pg.db, username, nil)
+			if getErr != nil {
+				log.Printf("User '%s' creation failed, skipping: %v\n", username, err)
+				continue
+			}
+			userIDs = append(userIDs, existing.ID)
+			continue
+		}
+		userIDs = append(userIDs, user.ID)
+		log.Printf("Created user: %s\n", username)
+	}
+
+	for _, ci := range communityIDs {
+		for _, uid := range userIDs {
+			comm, err := core.GetCommunityByID(pg.ctx, pg.db, ci.id, nil)
+			if err == nil {
+				comm.Join(pg.ctx, pg.db, uid)
+			}
+		}
+	}
+
+	postTexts := []struct {
+		title string
+		body  string
+	}{
+		{"Welcome to Discuit!", "This is a test post to help you get started with the platform. Feel free to explore!"},
+		{"What are you working on today?", "Share what projects or tasks you're focusing on. Let's motivate each other!"},
+		{"Best resources for learning programming", "I've been collecting great resources for learning to code. What are your favorites?"},
+		{"Weekend plans thread", "What's everyone up to this weekend? Share your plans!"},
+		{"Thoughts on the future of AI", "Artificial intelligence is advancing rapidly. What do you think the next big breakthrough will be?"},
+		{"Favorite productivity tools", "What tools do you use to stay productive? I'm always looking for new recommendations."},
+		{"Book recommendations", "Looking for something good to read. What books have you enjoyed recently?"},
+		{"Daily discussion thread", "Use this thread to chat about anything. No topic is off limits!"},
+		{"Tips for remote work", "Working from home can be challenging. What tips do you have for staying focused?"},
+		{"Share your hobby projects", "What interesting hobby projects are you working on? I'd love to see what people are creating."},
+		{"Morning coffee chat", "Just having my morning coffee. What's on your mind today?"},
+		{"Interesting articles I found this week", "Here are some articles I found interesting this week. Feel free to share yours too!"},
+		{"What games are you playing?", "Currently playing through some indie games. What have you been enjoying lately?"},
+		{"Photography tips for beginners", "I just got into photography. Any tips for a complete beginner?"},
+		{"Cooking challenge: 5 ingredients or less", "Can you make something delicious with just 5 ingredients? Share your recipes!"},
+		{"Favorite podcasts right now", "I listen to podcasts during my commute. What are you listening to?"},
+		{"Unpopular opinions thread", "Share your unpopular opinions here. Keep it civil!"},
+		{"Home office setup show-off", "Show us your home office setup! I'm looking for inspiration."},
+		{"Learning a new language", "I've decided to learn Japanese. Anyone else learning a new language? Tips welcome!"},
+		{"Best movies of this year", "What movies have impressed you the most this year?"},
+	}
+
+	commentTexts := []string{
+		"Great post! Thanks for sharing.",
+		"I completely agree with this.",
+		"Interesting perspective, I hadn't thought about it that way.",
+		"Can you elaborate on that point?",
+		"This is exactly what I was looking for!",
+		"I have a different view on this, but I respect your opinion.",
+		"Thanks for the recommendation!",
+		"I've had a similar experience.",
+		"Well said!",
+		"This deserves more attention.",
+		"Adding to this - there are also some good alternatives worth considering.",
+		"I tried this and it worked perfectly!",
+		"Bookmarking this for later.",
+		"Has anyone else noticed this trend?",
+		"Great discussion everyone!",
+	}
+
+	postCount := 0
+	commentCount := 0
+	for i, pt := range postTexts {
+		if len(communityIDs) == 0 || len(userIDs) == 0 {
+			break
+		}
+		ci := communityIDs[i%len(communityIDs)]
+		authorID := userIDs[i%len(userIDs)]
+
+		post, err := core.CreateTextPost(pg.ctx, pg.db, authorID, ci.id, pt.title, pt.body)
+		if err != nil {
+			log.Printf("Failed to create post '%s': %v\n", pt.title, err)
+			continue
+		}
+		postCount++
+
+		numComments := 2 + (i % 4)
+		for j := 0; j < numComments && j < len(commentTexts); j++ {
+			commentAuthor := userIDs[(i+j+1)%len(userIDs)]
+			_, err := post.AddComment(pg.ctx, pg.db, commentAuthor, core.UserGroupNormal, nil, commentTexts[(i+j)%len(commentTexts)])
+			if err != nil {
+				log.Printf("Failed to create comment on post '%s': %v\n", pt.title, err)
+				continue
+			}
+			commentCount++
+		}
+	}
+
+	log.Printf("Seed complete: %d communities, %d users, %d posts, %d comments\n",
+		len(communityIDs), len(userIDs), postCount, commentCount)
 	return nil
 }

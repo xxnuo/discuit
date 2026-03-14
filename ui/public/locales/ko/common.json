@@ -1,0 +1,209 @@
+{
+  "login": "Login",
+  "signup": "Signup",
+  "logout": "Logout",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "create": "Create",
+  "report": "Report",
+  "close": "Close",
+  "retry": "Retry",
+  "back": "Back",
+  "next": "Next",
+  "previous": "Previous",
+  "none": "None",
+  "reload": "Reload",
+  "notNow": "Not now",
+  "unmute": "Unmute",
+  "unmuteAll": "Unmute all",
+  "new": "New",
+  "username": "Username",
+  "password": "Password",
+  "email": "Email",
+  "somethingWentWrong": "Something went wrong.",
+  "nothingToShow": "Nothing to show",
+  "submit": "Submit",
+  "edit": "Edit",
+  "share": "Share",
+  "copy": "Copy",
+  "copied": "Copied to clipboard",
+  "confirm": "Confirm",
+  "yes": "Yes",
+  "no": "No",
+  "ok": "OK",
+  "loading": "Loading...",
+  "search": "Search",
+  "mute": "Mute",
+  "ban": "Ban",
+  "unban": "Unban",
+  "pin": "Pin",
+  "unpin": "Unpin",
+  "lock": "Lock",
+  "unlock": "Unlock",
+  "joinedOn": "Joined on {{date}}",
+  "point": "point",
+  "point_plural": "points",
+  "comment": "comment",
+  "comment_plural": "comments",
+  "member": "member",
+  "member_plural": "members",
+  "image": "image",
+  "image_plural": "images",
+  "nav": {
+    "createAccount": "Create account",
+    "settings": "Settings",
+    "profile": "Profile",
+    "adminDashboard": "Admin dashboard",
+    "darkMode": "Dark mode",
+    "chat": "Chat",
+    "elements": "Elements"
+  },
+  "sidebar": {
+    "home": "Home",
+    "subscriptions": "Subscriptions",
+    "all": "All",
+    "moderating": "Moderating",
+    "communities": "Communities",
+    "guidelines": "Guidelines",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "contact": "Contact",
+    "about": "About",
+    "showLess": "Show less",
+    "showMore": "Show {{count}} more",
+    "myLists": "My Lists",
+    "myCommunities": "My communities"
+  },
+  "footer": {
+    "description": "Better discussions on the internet.",
+    "organization": "Organization",
+    "social": "Social",
+    "policies": "Policies",
+    "siteGuidelines": "Site guidelines",
+    "moderatorGuidelines": "Moderator guidelines",
+    "documentation": "Documentation",
+    "blog": "Blog"
+  },
+  "welcome": {
+    "joinDiscussion": "Join the discussion",
+    "description": "Discuit is a place where <1>{{count}}</1> people get together to find cool stuff and discuss things.",
+    "createPost": "Create post",
+    "createCommunity": "Create community",
+    "createNewAccount": "Create new account"
+  },
+  "appUpdate": {
+    "title": "Update available!",
+    "message": "A new version of this app is available. Reload the page to update. It won't take more than a second."
+  },
+  "loginPrompt": {
+    "title": "Login to continue"
+  },
+  "notFound": {
+    "title": "404: Not Found",
+    "heading": "404: Not found!",
+    "message": "The page you're looking for does not exist.",
+    "goHome": "Go home."
+  },
+  "offline": {
+    "title": "You're offline",
+    "message": "Check your internet connection."
+  },
+  "error": {
+    "title": "Something went wrong",
+    "tryReload": "Try reloading page",
+    "failedLogout": "Failed to logout. Something went wrong.",
+    "fileSizeExceeded": "Maximum file size exceeded.",
+    "unsupportedImage": "Unsupported image.",
+    "unsupportedFileType": "File '{{name}}' is of an unsupported type.",
+    "invalidUrl": "The URL you provided is not a valid URL."
+  },
+  "feed": {
+    "hot": "Hot",
+    "activity": "Activity",
+    "new": "New",
+    "topDay": "Top Day",
+    "topWeek": "Top Week",
+    "topMonth": "Top Month",
+    "topYear": "Top Year",
+    "topAll": "Top All",
+    "posts": "Posts",
+    "home": "Home",
+    "subscriptions": "Subscriptions",
+    "moderating": "Moderating"
+  },
+  "timeAgo": {
+    "justNow": "just now",
+    "second": "second",
+    "seconds": "seconds",
+    "minute": "minute",
+    "minutes": "minutes",
+    "hour": "hour",
+    "hours": "hours",
+    "day": "day",
+    "days": "days",
+    "week": "week",
+    "weeks": "weeks",
+    "year": "year",
+    "years": "years",
+    "ago": " ago"
+  },
+  "months": {
+    "0": "January",
+    "1": "February",
+    "2": "March",
+    "3": "April",
+    "4": "May",
+    "5": "June",
+    "6": "July",
+    "7": "August",
+    "8": "September",
+    "9": "October",
+    "10": "November",
+    "11": "December"
+  },
+  "userGroup": {
+    "modShort": "mod",
+    "modLong": "moderator",
+    "admin": "admin",
+    "user": "user"
+  },
+  "saveToList": {
+    "saveTo": "Save to",
+    "createList": "Create list",
+    "createNewList": "Create new list",
+    "savedTo": "Saved to {{name}}",
+    "removedFrom": "Removed from {{name}}"
+  },
+  "reportModal": {
+    "reportTarget": "Report {{type}}",
+    "alreadyReported": "You have already reported this {{type}}",
+    "reported": "{{type}} reported."
+  },
+  "createCommunityModal": {
+    "title": "Create community",
+    "communityName": "Community name",
+    "communityNameCannotChange": "Community name cannot be changed.",
+    "description": "Description",
+    "descriptionHelp": "A short description to let people know what the community is all about.",
+    "nameTooShort": "Name has to be at least 3 characters.",
+    "alreadyExists": "A community by that name already exists.",
+    "notEnoughPoints": "You need at least {{points}} points to create a community.",
+    "maxLimitReached": "You've reached your max limit of the number of communities you can moderate."
+  },
+  "guidelines": {
+    "title": "Guidelines"
+  },
+  "terms": {
+    "title": "Terms of Service"
+  },
+  "privacyPolicy": {
+    "title": "Privacy Policy"
+  },
+  "markdownGuide": {
+    "title": "Markdown Guide"
+  },
+  "moderatorGuidelines": {
+    "title": "Moderator Guidelines"
+  }
+}
