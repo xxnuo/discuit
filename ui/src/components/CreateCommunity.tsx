@@ -1,6 +1,5 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { useHistory } from 'react-router-dom';
 import { communityAboutMaxLength, communityNameMaxLength } from '../config';
@@ -15,7 +14,6 @@ import { InputWithCount, useInputMaxLength } from './Input';
 import Modal from './Modal';
 
 const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
-  const { t } = useTranslation();
   const [name, handleNameChange] = useInputUsername(communityNameMaxLength);
   const [description, handleDescChange] = useInputMaxLength(communityAboutMaxLength);
 
@@ -30,7 +28,7 @@ const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void
 
   const handleCreate = async () => {
     if (name.length < 3) {
-      alert(t('createCommunityModal.nameTooShort'));
+      alert('Name has to be at least 3 characters.');
       return;
     }
     try {
@@ -44,15 +42,17 @@ const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void
         onClose();
         history.push(`/${name}`);
       } else if (res.status === 409) {
-        setFormError(t('createCommunityModal.alreadyExists'));
+        setFormError('A community by that name already exists.');
       } else {
         const error = await res.json();
         if (error.code === 'not_enough_points') {
           setFormError(
-            t('createCommunityModal.notEnoughPoints', { points: import.meta.env.VITE_FORUMCREATIONREQPOINTS })
+            `You need at least ${import.meta.env.VITE_FORUMCREATIONREQPOINTS} points to create a community.`
           );
         } else if (error.code === 'max_limit_reached') {
-          setFormError(t('createCommunityModal.maxLimitReached'));
+          setFormError(
+            "You've reached your max limit of the number of communities you can moderate."
+          );
         } else {
           throw new Error(JSON.stringify(error));
         }
@@ -66,11 +66,11 @@ const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void
     <Modal open={open} onClose={onClose}>
       <div className="modal-card modal-form modal-create-comm">
         <div className="modal-card-head">
-          <div className="modal-card-title">{t('createCommunityModal.title')}</div>
+          <div className="modal-card-title">Create community</div>
           <ButtonClose onClick={onClose} />
         </div>
         <div className="form modal-card-content flex-column inner-gap-1">
-          <FormField label={t('createCommunityModal.communityName')} description={t('createCommunityModal.communityNameCannotChange')}>
+          <FormField label="Community name" description="Community name cannot be changed.">
             <InputWithCount
               value={name}
               onChange={handleNameChange}
@@ -80,8 +80,8 @@ const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void
             />
           </FormField>
           <FormField
-            label={t('createCommunityModal.description')}
-            description={t('createCommunityModal.descriptionHelp')}
+            label="Description"
+            description="A short description to let people know what the community is all about."
           >
             <InputWithCount
               value={description}
@@ -98,7 +98,7 @@ const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void
           )}
           <FormField>
             <button onClick={handleCreate} className="button-main" style={{ width: '100%' }}>
-              {t('create')}
+              Create
             </button>
           </FormField>
         </div>

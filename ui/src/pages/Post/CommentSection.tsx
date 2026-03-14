@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { mfetchjson } from '../../helper';
 import { Comment as CommentType, Community, User } from '../../serverTypes';
@@ -34,7 +33,6 @@ const CommentSection = ({
   canComment,
 }: CommentSectionProps) => {
   const dispatch = useDispatch();
-  const { t } = useTranslation(['common', 'post']);
 
   const postId = post.publicId;
   // const comments = useSelector((state) => {
@@ -166,7 +164,7 @@ const CommentSection = ({
 
   // const totalRenders = useRef(0);
   const moreCommentsText =
-    moreCommentsLoading === 'loading' ? t('common:loading') : t('post:moreComments', { count: noMoreReplies });
+    moreCommentsLoading === 'loading' ? 'loading...' : `${noMoreReplies} more comments`;
 
   return (
     <div className="post-comments-comments">

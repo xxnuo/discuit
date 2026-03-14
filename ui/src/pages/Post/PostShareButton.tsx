@@ -1,5 +1,4 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import Dropdown from '../../components/Dropdown';
 import { copyToClipboard } from '../../helper';
@@ -7,7 +6,6 @@ import { snackAlert } from '../../slices/mainSlice';
 import { Post } from '../../slices/postsSlice';
 
 const Target = (props: React.HTMLAttributes<HTMLDivElement>) => {
-  const { t } = useTranslation('common');
   return (
     <div className="button button-with-icon button-text" {...props}>
       <svg
@@ -26,20 +24,19 @@ const Target = (props: React.HTMLAttributes<HTMLDivElement>) => {
           fill="currentColor"
         />
       </svg>
-      <span>{t('share')}</span>
+      <span>Share</span>
     </div>
   );
 };
 
 const PostShareButton = ({ post }: { post: Post }) => {
   const dispatch = useDispatch();
-  const { t } = useTranslation('post');
 
   const url = `${window.location.origin}/${post.communityName}/post/${post.publicId}`;
   const handleCopyURL = () => {
-    let text = t('linkCopyFailed');
+    let text = 'Failed to copy link to clipboard.';
     if (copyToClipboard(url)) {
-      text = t('linkCopied');
+      text = 'Link copied to clipboard.';
     }
     dispatch(snackAlert(text, 'pl_copied'));
   };
@@ -60,7 +57,7 @@ const PostShareButton = ({ post }: { post: Post }) => {
     if (!post.images || post.images.length === 0) {
       return (
         <div className="button-clear dropdown-item" style={{ opacity: 'var(--disabled-opacity)' }}>
-          {t('downloadImage')}
+          Download image
         </div>
       );
     }
@@ -71,7 +68,7 @@ const PostShareButton = ({ post }: { post: Post }) => {
     }.${image.format}`;
     return (
       <a href={url} className="button-clear dropdown-item" download={filename}>
-        {t('downloadImage')}
+        Download image
       </a>
     );
   };
@@ -87,7 +84,7 @@ const PostShareButton = ({ post }: { post: Post }) => {
           href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(twitterText)}`}
           rel="noreferrer"
         >
-          {t('toTwitter')}
+          To Twitter / X
         </a>
         <a
           className="button-clear dropdown-item"
@@ -95,15 +92,15 @@ const PostShareButton = ({ post }: { post: Post }) => {
           href={`https://www.facebook.com/sharer.php?u=${url}`}
           rel="noreferrer"
         >
-          {t('toFacebook')}
+          To Facebook
         </a>
         <button className="button-clear dropdown-item" onClick={handleCopyURL}>
-          {t('copyUrl')}
+          Copy URL
         </button>
         {post.type === 'image' && renderImageDownloadButton()}
         {hasMoreShareableOptions && (
           <button className="button-clear dropdown-item" onClick={handleMoreButtonClick}>
-            {t('more')}
+            More
           </button>
         )}
       </div>

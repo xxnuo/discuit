@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { useHistory, useLocation } from 'react-router';
 import Feed from '../components/Feed';
@@ -20,15 +19,15 @@ type SortOption = {
   to?: string;
 };
 
-const sortOptionKeys: { textKey: string; id: string; to?: string }[] = [
-  { textKey: 'feed.hot', id: 'hot' },
-  { textKey: 'feed.activity', id: 'activity' },
-  { textKey: 'feed.new', id: 'latest' },
-  { textKey: 'feed.topDay', id: 'day' },
-  { textKey: 'feed.topWeek', id: 'week' },
-  { textKey: 'feed.topMonth', id: 'month' },
-  { textKey: 'feed.topYear', id: 'year' },
-  { textKey: 'feed.topAll', id: 'all' },
+const sortOptions: SortOption[] = [
+  { text: 'Hot', id: 'hot' },
+  { text: 'Activity', id: 'activity' },
+  { text: 'New', id: 'latest' },
+  { text: 'Top Day', id: 'day' },
+  { text: 'Top Week', id: 'week' },
+  { text: 'Top Month', id: 'month' },
+  { text: 'Top Year', id: 'year' },
+  { text: 'Top All', id: 'all' },
 ];
 const sortDefault = import.meta.env.VITE_DEFAULTFEEDSORT;
 const baseURL = '/api/posts';
@@ -57,14 +56,14 @@ function useFeedSort(rememberLastSort = false): [string | null, (newSort: string
   sortSaved = sortSaved || sortDefault;
 
   // If sortOptions.to is preset, use query parameters and go to the link.
-  for (let i = 0; i < sortOptionKeys.length; i++) {
+  for (let i = 0; i < sortOptions.length; i++) {
     if (rememberLastSort) {
-      sortOptionKeys[i].to = undefined;
+      sortOptions[i].to = undefined;
     } else {
-      if (sortOptionKeys[i].id === sortDefault) {
-        sortOptionKeys[i].to = location.pathname;
+      if (sortOptions[i].id === sortDefault) {
+        sortOptions[i].to = location.pathname;
       } else {
-        sortOptionKeys[i].to = `${location.pathname}?sort=${sortOptionKeys[i].id}`;
+        sortOptions[i].to = `${location.pathname}?sort=${sortOptions[i].id}`;
       }
     }
   }
@@ -78,7 +77,7 @@ function useFeedSort(rememberLastSort = false): [string | null, (newSort: string
       window.localStorage.setItem('feedSort', newSort);
     } else {
       let to = '#';
-      sortOptionKeys
+      sortOptions
         .filter((option) => option.id === newSort)
         .forEach((option) => (to = option.to || ''));
       history.replace(to);
@@ -105,14 +104,6 @@ const PostsFeed = ({
   communityId: string | null;
 }) => {
   const dispatch = useDispatch();
-
-  const { t } = useTranslation();
-
-  const sortOptions: SortOption[] = sortOptionKeys.map((o) => ({
-    text: t(o.textKey),
-    id: o.id,
-    to: o.to,
-  }));
 
   const user = useSelector<RootState>((state) => state.main.user) as MainState['user'];
   const loggedIn = user !== null;
@@ -162,7 +153,7 @@ const PostsFeed = ({
   };
 
   const canonicalURL = () => {
-    const sortValid = sortOptionKeys.filter((option) => option.id === sort).length !== 0;
+    const sortValid = sortOptions.filter((option) => option.id === sort).length !== 0;
     if (!sortValid) return '';
     const url = window.location;
     const search = sort === sortDefault ? '' : `?sort=${sort}`;
@@ -170,14 +161,14 @@ const PostsFeed = ({
   };
   useCanonicalTag(canonicalURL(), [location]);
 
-  let name = t('feed.posts');
+  let name = 'Posts';
   if (!communityId) {
     if (feedType === 'all') {
-      name = t('feed.home');
+      name = 'Home';
     } else if (feedType === 'subscriptions') {
-      name = t('feed.subscriptions');
+      name = 'Subscriptions';
     } else if (feedType === 'moderating') {
-      name = t('feed.moderating');
+      name = 'Moderating';
     }
   }
 

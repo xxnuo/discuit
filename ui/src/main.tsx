@@ -4,17 +4,14 @@ import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from 'react-error-boundary';
 import { HelmetProvider } from 'react-helmet-async';
 import { Provider } from 'react-redux';
-import { useTranslation } from 'react-i18next';
 import { BrowserRouter as Router } from 'react-router-dom';
 import App from './App';
 import { forceSwUpdate } from './AppUpdate';
 import { isDeviceIos } from './helper';
-import './i18n/i18n';
 import './scss/styles.scss';
 import store from './store';
 
 const Fallback = ({ error }: { error: Error }) => {
-  const { t } = useTranslation();
   useEffect(() => {
     forceSwUpdate();
   }, []);
@@ -33,10 +30,10 @@ const Fallback = ({ error }: { error: Error }) => {
 
   return (
     <div className="page-app-error">
-      <h1>{t('error.title')}</h1>
+      <h1>Something went wrong</h1>
       <p>{error.toString()}</p>
       <button onClick={handleReload} disabled={reloadDisabled}>
-        {t('error.tryReload')}
+        Try reloading page
       </button>
     </div>
   );

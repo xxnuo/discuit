@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
 import { useDispatch, useSelector } from 'react-redux';
 import { useHistory, useLocation, useParams } from 'react-router-dom';
@@ -40,7 +39,6 @@ const Community = () => {
   const history = useHistory();
   const location = useLocation();
   const dispatch = useDispatch();
-  const { t } = useTranslation(['community', 'common', 'post']);
 
   const community = useSelector(selectCommunity(name));
   const loading = !(community && Array.isArray(community.mods) && Array.isArray(community.rules));
@@ -94,16 +92,16 @@ const Community = () => {
           url,
         });
       } else {
-        let text = t('post:linkCopyFailed');
+        let text = 'Failed to copy link to clipboard.';
         if (copyToClipboard(url)) {
-          text = t('post:linkCopied');
+          text = 'Link copied to clipboard.';
         }
         dispatch(snackAlert(text, 'pl_copied'));
       }
     };
     return (
       <button className="button-clear dropdown-item" onClick={handleClick}>
-        {useNavigatorShare ? t('common:share') : t('post:copyUrl')}
+        {useNavigatorShare ? 'Share' : 'Copy URL'}
       </button>
     );
   };
@@ -219,7 +217,7 @@ const Community = () => {
         body: JSON.stringify({ altText }),
       });
 
-      dispatch(snackAlert(t('community:altTextSaved')));
+      dispatch(snackAlert('Alt text saved.'));
       setBannerModalOpen(false);
       setCommunityPicModalOpen(false);
     } catch (error) {
@@ -254,7 +252,7 @@ const Community = () => {
     return (
       <div className="card card-sub card-mods">
         <div className="card-head">
-          <div className="card-title">{t('community:moderators')}</div>
+          <div className="card-title">Moderators</div>
         </div>
         <div className="card-content">
           <ul>
@@ -275,11 +273,11 @@ const Community = () => {
     return (
       <>
         <Link to={`/new?community=${community.name}`} className={'button button-main'}>
-          {t('community:createPost')}
+          Create post
         </Link>
         {(community.userMod || (user && user.isAdmin)) && (
           <Link className="button" to={`/${name}/modtools`}>
-            {community.userMod ? t('community:modTools') : t('community:modToolsAdmin')}
+            {`MOD TOOLS` + (!community.userMod ? ' (ADMIN)' : '')}
           </Link>
         )}
       </>
@@ -301,7 +299,7 @@ const Community = () => {
                 <button
                   className="banner-edit-button"
                   onClick={() => setBannerModalOpen(true)}
-                  title={t('community:editBanner')}
+                  title="Edit banner"
                 >
                   <SVGEdit />
                 </button>
@@ -348,7 +346,7 @@ const Community = () => {
               </ShowMoreBox>
             </div>
             <div className="comm-main-created-at">
-              {`${t('community:createdOn')} ${dateString1(community.createdAt)}.`}
+              {`Created on ${dateString1(community.createdAt)}.`}
             </div>
           </div>
           <div className="tabs is-m">
@@ -356,13 +354,13 @@ const Community = () => {
               className={'button-clear tab-item' + (tab === 'posts' ? ' is-active' : '')}
               onClick={() => setTab('posts')}
             >
-              {t('community:posts')}
+              Posts
             </button>
             <button
               className={'button-clear tab-item' + (tab === 'about' ? ' is-active' : '')}
               onClick={() => setTab('about')}
             >
-              {t('community:about')}
+              About
             </button>
           </div>
         </header>
@@ -387,7 +385,7 @@ const Community = () => {
       <ImageEditModal
         open={communityPicModalOpen}
         onClose={() => setCommunityPicModalOpen(false)}
-        title={t('community:editCommunityIcon')}
+        title="Edit community icon"
         imageUrl={community.proPic ? selectImageCopyURL('medium', community.proPic) : undefined}
         altText={community.proPic?.altText}
         onUpload={handleUploadCommunityPic}
@@ -400,7 +398,7 @@ const Community = () => {
       <ImageEditModal
         open={bannerModalOpen}
         onClose={() => setBannerModalOpen(false)}
-        title={t('community:editCommunityBanner')}
+        title="Edit community banner"
         imageUrl={
           community.bannerImage ? selectImageCopyURL('medium', community.bannerImage) : undefined
         }

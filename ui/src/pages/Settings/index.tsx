@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import {
@@ -33,7 +32,6 @@ import DeleteAccount from './DeleteAccount';
 import { getDevicePreference, setDevicePreference } from './devicePrefs';
 
 const Settings = () => {
-  const { t, i18n } = useTranslation();
   const dispatch = useDispatch();
   const user = (useSelector<RootState>((state) => state.main.user) as MainState['user'])!;
   const loggedIn = user !== null;
@@ -56,8 +54,8 @@ const Settings = () => {
   };
 
   const homeFeedOptions = {
-    all: t('settings:homeFeedAll'),
-    subscriptions: t('settings:homeFeedSubscriptions'),
+    all: 'All',
+    subscriptions: 'Subscriptions',
   };
 
   const [homeFeed, setHomeFeed] = useState(user.homeFeed);
@@ -70,8 +68,8 @@ const Settings = () => {
   const [requireAltText, setRequireAltText] = useState(user.requireAltText);
 
   const fontOptions = {
-    custom: t('settings:fontCustom'),
-    system: t('settings:fontSystem'),
+    custom: 'Custom', // value -> display name
+    system: 'System',
   };
 
   // Per-device preferences:
@@ -143,7 +141,7 @@ const Settings = () => {
 
   const handleSave = async () => {
     if (email !== '' && !validEmail(email)) {
-      dispatch(snackAlert(t('settings:validEmailRequired')));
+      dispatch(snackAlert('Please enter a valid email'));
       return;
     }
     // Save device preferences first:
@@ -172,7 +170,7 @@ const Settings = () => {
         }),
       });
       dispatch(userLoggedIn(ruser));
-      dispatch(snackAlert(t('settings:settingsSaved'), 'settings_saved'));
+      dispatch(snackAlert('Settings saved.', 'settings_saved'));
       resetChanged();
       dispatch(settingsChanged());
     } catch (error) {
@@ -225,7 +223,7 @@ const Settings = () => {
 
   const handleSaveProfilePicAlt = async (altText: string) => {
     try {
-      if (!user.proPic) return dispatch(snackAlert(t('settings:noProfilePicture')));
+      if (!user.proPic) return dispatch(snackAlert('No profile picture to update.'));
       const proPicId = user.proPic.id;
       await mfetchjson(`/api/images/${proPicId}`, {
         method: 'PUT',
@@ -233,7 +231,7 @@ const Settings = () => {
       });
 
       user.proPic.altText = altText;
-      dispatch(snackAlert(t('settings:altTextSaved')));
+      dispatch(snackAlert('Alt text saved.'));
       setProfilePicModalOpen(false);
     } catch (error) {
       dispatch(snackAlertError(error));
@@ -297,7 +295,7 @@ const Settings = () => {
       return (
         <div className="mute-list-item">
           <CommunityLink name={community.name} proPic={community.proPic} />
-          <button onClick={() => handleUnmute(mute)}>{t('unmute')}</button>
+          <button onClick={() => handleUnmute(mute)}>Unmute</button>
         </div>
       );
     }
@@ -306,7 +304,7 @@ const Settings = () => {
       return (
         <div>
           <Link to={`/@${user.username}`}>@{user.username}</Link>
-          <button onClick={() => handleUnmute(mute)}>{t('unmute')}</button>
+          <button onClick={() => handleUnmute(mute)}>Unmute</button>
         </div>
       );
     }
@@ -319,27 +317,27 @@ const Settings = () => {
   return (
     <div className="page-content wrap page-settings">
       <Helmet>
-        <title>{t('settings:title')}</title>
+        <title>Settings</title>
       </Helmet>
       <div className="form account-settings card">
-        <h1>{t('settings:accountSettings')}</h1>
+        <h1>Account settings</h1>
         <FormSection>
           <FormSection>
             <div className="settings-propic">
               <CommunityProPic name={user.username} proPic={user.proPic} size="standard" />
-              <button onClick={() => setProfilePicModalOpen(true)}>{t('settings:editProfilePicture')}</button>
+              <button onClick={() => setProfilePicModalOpen(true)}>Edit profile picture</button>
             </div>
           </FormSection>
-          <FormField label={t('username')} description={t('settings:usernameCannotChange')}>
+          <FormField label="Username" description="Username cannot be changed.">
             <Input value={user.username || ''} disabled />
           </FormField>
-          <FormField label={t('email')}>
+          <FormField label="Email">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </FormField>
-          <FormField label={t('settings:aboutMe')}>
+          <FormField label="About me">
             <textarea
               rows={5}
-              placeholder={t('settings:aboutMePlaceholder')}
+              placeholder="Write something about yourself..."
               value={aboutMe}
               onChange={(e) => setAboutMe(e.target.value)}
             />
@@ -351,8 +349,8 @@ const Settings = () => {
             <DeleteAccount user={user} />
           </FormField>
         </FormSection>
-        <FormSection heading={t('settings:preferences')}>
-          <FormField className="is-preference" label={t('settings:homeFeed')}>
+        <FormSection heading="Preferences">
+          <FormField className="is-preference" label="Home feed">
             <Dropdown
               aligned="right"
               target={<button className="select-bar-dp-target">{homeFeedOptions[homeFeed]}</button>}
@@ -374,14 +372,14 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings:rememberFeedSort')}
+              label="Remember last feed sort"
               checked={rememberFeedSort}
               onChange={(e) => setRememberFeedSort(e.target.checked)}
             />
           </FormField>
           <FormField className="is-preference is-switch">
             <Checkbox
-              label={t('settings:enableEmbeds')}
+              label="Enable embeds"
               variant="switch"
               checked={enableEmbeds}
               onChange={(e) => setEnableEmbeds(e.target.checked)}
@@ -390,7 +388,7 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings:showUserProfilePictures')}
+              label="Show user profile pictures"
               checked={showUserProfilePictures}
               onChange={(e) => setShowUserProfilePictures(e.target.checked)}
             />
@@ -398,14 +396,14 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings:requireAltText')}
+              label="Require alt text when posting images"
               checked={requireAltText}
               onChange={(e) => setRequireAltText(e.target.checked)}
             />
           </FormField>
         </FormSection>
-        <FormSection heading={t('settings:devicePreferences')}>
-          <FormField className="is-preference" label={t('settings:font')}>
+        <FormSection heading="Device preferences">
+          <FormField className="is-preference" label="Font">
             <Dropdown
               aligned="right"
               target={<button className="select-bar-dp-target">{fontOptions[font]}</button>}
@@ -425,7 +423,7 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings:enableInfiniteScrolling')}
+              label="Enable infinite scrolling"
               checked={!infiniteScrollingDisabed}
               onChange={(e) => setInfinitedScrollingDisabled(!e.target.checked)}
             />
@@ -434,39 +432,18 @@ const Settings = () => {
             <FormField className="is-preference is-switch">
               <Checkbox
                 variant="switch"
-                label={t('settings:autoHideTopNavbar')}
+                label="Auto-hide top navbar"
                 checked={!topNavbarAutohideDisabled}
                 onChange={(e) => setTopNavbarAutohideDisabled(!e.target.checked)}
               />
             </FormField>
           )}
         </FormSection>
-        <FormSection heading={t('settings:language')}>
-          <FormField className="is-preference" label={t('settings:language')}>
-            <Dropdown
-              aligned="right"
-              target={<button className="select-bar-dp-target">{i18n.language === 'zh' ? '中文' : 'English'}</button>}
-            >
-              <div className="dropdown-list">
-                {i18n.language !== 'en' && (
-                  <div className="dropdown-item" onClick={() => i18n.changeLanguage('en')}>
-                    English
-                  </div>
-                )}
-                {i18n.language !== 'zh' && (
-                  <div className="dropdown-item" onClick={() => i18n.changeLanguage('zh')}>
-                    中文
-                  </div>
-                )}
-              </div>
-            </Dropdown>
-          </FormField>
-        </FormSection>
-        <FormSection heading={t('settings:notifications')}>
+        <FormSection heading="Notifications">
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings:enableUpvoteNotifications')}
+              label="Enable upvote notifications"
               checked={notifsSettings.upvoteNotifs}
               onChange={(e) => setNotifsSettings('upvoteNotifs', e.target.checked)}
             />
@@ -474,7 +451,7 @@ const Settings = () => {
           <FormField className="is-preference is-switch">
             <Checkbox
               variant="switch"
-              label={t('settings:enableReplyNotifications')}
+              label="Enable reply notifications"
               checked={notifsSettings.replyNotifs}
               onChange={(e) => setNotifsSettings('replyNotifs', e.target.checked)}
             />
@@ -482,32 +459,32 @@ const Settings = () => {
           {canEnableWebPushNotifications && (
             <FormField>
               <button onClick={handleEnablePushNotifications} style={{ alignSelf: 'flex-start' }}>
-                {t('settings:enablePushNotifications')}
+                Enable push notifications
               </button>
             </FormField>
           )}
         </FormSection>
-        <FormSection heading={t('settings:mutedCommunities')}>
+        <FormSection heading="Muted communities">
           <div className="mutes-list">
-            {communityMutes.length === 0 && <div>{t('none')}</div>}
+            {communityMutes.length === 0 && <div>None</div>}
             {communityMutes.map((mute) => renderMute(mute))}
             {communityMutes.length > 0 && (
               <button
                 style={{ alignSelf: 'flex-end' }}
                 onClick={() => handleUnmuteAll('community')}
               >
-                {t('unmuteAll')}
+                Unmute all
               </button>
             )}
           </div>
         </FormSection>
-        <FormSection heading={t('settings:mutedUsers')}>
+        <FormSection heading="Muted users">
           <div className="mutes-list">
-            {userMutes.length === 0 && <div>{t('none')}</div>}
+            {userMutes.length === 0 && <div>None</div>}
             {userMutes.map((mute) => renderMute(mute))}
             {userMutes.length > 0 && (
               <button style={{ alignSelf: 'flex-end' }} onClick={() => handleUnmuteAll('user')}>
-                {t('unmuteAll')}
+                Unmute all
               </button>
             )}
           </div>
@@ -519,7 +496,7 @@ const Settings = () => {
             onClick={handleSave}
             style={{ width: '100%' }}
           >
-            {t('save')}
+            Save
           </button>
         </FormField>
       </div>
@@ -527,7 +504,7 @@ const Settings = () => {
       <ImageEditModal
         open={profilePicModalOpen}
         onClose={() => setProfilePicModalOpen(false)}
-        title={t('settings:editProfilePicture')}
+        title="Edit profile picture"
         imageUrl={user.proPic ? selectImageCopyURL('medium', user.proPic) : undefined}
         altText={user.proPic?.altText}
         onUpload={handleUploadProfilePic}

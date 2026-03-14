@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import { MainState } from '../../slices/mainSlice';
 import { RootState } from '../../store';
@@ -14,7 +13,6 @@ const AsUser = ({
   onChange: (group: string) => void;
 }) => {
   const user = useSelector<RootState>((state) => state.main.user) as MainState['user'];
-  const { t } = useTranslation('post');
   const isAdmin = user !== null ? user.isAdmin : false;
 
   const [group, setGroup] = useState('normal');
@@ -42,7 +40,7 @@ const AsUser = ({
             onChange={(e) => handleChange('mods', e.target.checked)}
             disabled={disabled}
           />
-          <label htmlFor="c1">{t('speakingAsMod')}</label>
+          <label htmlFor="c1">Speaking as moderator.</label>
         </div>
       )}
       {isAdmin && (
@@ -54,7 +52,7 @@ const AsUser = ({
             onChange={(e) => handleChange('admins', e.target.checked)}
             disabled={disabled}
           />
-          <label htmlFor="c2">{t('speakingAsAdmin')}</label>
+          <label htmlFor="c2">Speaking as admin.</label>
         </div>
       )}
     </>

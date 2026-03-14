@@ -1,6 +1,5 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { ButtonClose } from '../../components/Button';
 import Modal from '../../components/Modal';
 import { Post } from '../../serverTypes';
@@ -20,21 +19,22 @@ const PostDeleteModal = ({
   postType,
   canDeleteContent = false,
 }: PostDeleteModalProps) => {
-  const { t } = useTranslation('post');
   const [deleteContent, setDeleteContent] = useState(false);
 
   const showCheckbox = canDeleteContent && (postType === 'image' || postType === 'link');
-  let label = postType === 'image' ? t('deleteImageToo') : t('deleteLinkToo');
+  let label = 'Delete ';
+  if (postType === 'image') label += 'image too.';
+  else if (postType === 'link') label += 'link too.';
 
   return (
     <Modal open={open} onClose={onClose}>
       <div className="modal-card is-compact-mobile is-center modal-delete-post">
         <div className="modal-card-head">
-          <div className="modal-card-title">{t('deletePostTitle')}</div>
+          <div className="modal-card-title">Delete post</div>
           <ButtonClose onClick={onClose} />
         </div>
         <div className="modal-card-content">
-          <p>{t('deletePostConfirm')}</p>
+          <p>Are you sure you want to delete this post?</p>
           {showCheckbox && (
             <div className="checkbox" style={{ marginTop: '5px' }}>
               <input
@@ -49,9 +49,9 @@ const PostDeleteModal = ({
         </div>
         <div className="modal-card-actions">
           <button className="button-main" onClick={() => onDelete(deleteContent)}>
-            {t('common:yes')}
+            Yes
           </button>
-          <button onClick={onClose}>{t('common:no')}</button>
+          <button onClick={onClose}>No</button>
         </div>
       </div>
     </Modal>
@@ -71,7 +71,6 @@ export const PostContentDeleteModal = ({
   onDelete,
   post,
 }: PostContentDeleteModalProps) => {
-  const { t } = useTranslation('post');
   const postContentType =
     post.type === 'image'
       ? post.images && post.images.length > 1
@@ -82,17 +81,17 @@ export const PostContentDeleteModal = ({
     <Modal open={open} onClose={onClose}>
       <div className="modal-card">
         <div className="modal-card-head">
-          <div className="modal-card-title">{t('deletePostContent', { type: postContentType })}</div>
+          <div className="modal-card-title">Delete post {postContentType}</div>
           <ButtonClose onClick={onClose} />
         </div>
         <div className="modal-card-content">
-          <p>{t('deletePostContentConfirm', { type: postContentType })}</p>
+          <p>{`Are you sure you want to permanently delete the post's ${postContentType}?`}</p>
         </div>
         <div className="modal-card-actions">
           <button className="button-main" onClick={() => onDelete()}>
-            {t('common:yes')}
+            Yes
           </button>
-          <button onClick={onClose}>{t('common:no')}</button>
+          <button onClick={onClose}>No</button>
         </div>
       </div>
     </Modal>

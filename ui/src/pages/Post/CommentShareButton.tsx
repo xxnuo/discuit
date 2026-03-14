@@ -1,5 +1,4 @@
 import PropTypes from 'prop-types';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import Dropdown from '../../components/Dropdown';
 import { copyToClipboard, publicURL } from '../../helper';
@@ -7,18 +6,17 @@ import { snackAlert } from '../../slices/mainSlice';
 
 export const CommentShareDropdownItems = ({ url }: { url: string }) => {
   const dispatch = useDispatch();
-  const { t } = useTranslation('post');
   const handleCopyURL = () => {
-    let text = t('linkCopyFailed');
+    let text = 'Failed to copy link to clipboard.';
     if (copyToClipboard(publicURL(url))) {
-      text = t('linkCopied');
+      text = 'Link copied to clipboard.';
     }
     dispatch(snackAlert(text, 'comment_link_copied'));
   };
 
   return (
     <div className="dropdown-item" onClick={handleCopyURL}>
-      {t('copyUrl')}
+      Copy URL
     </div>
   );
 };
@@ -28,9 +26,8 @@ CommentShareDropdownItems.propTypes = {
 };
 
 const CommentShareButton = ({ url }: { url: string }) => {
-  const { t } = useTranslation('common');
   return (
-    <Dropdown target={<button className="button-text post-comment-button">{t('share')}</button>}>
+    <Dropdown target={<button className="button-text post-comment-button">Share</button>}>
       <div className="dropdown-list">
         <CommentShareDropdownItems url={url} />
       </div>

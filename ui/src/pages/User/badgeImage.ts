@@ -1,3 +1,5 @@
+import BadgeSupporter from '../../../public/badge-supporter.png';
+
 export function badgeImage(type: string): { src: string; alt: string } {
   const ret = {
     src: '',
@@ -5,7 +7,7 @@ export function badgeImage(type: string): { src: string; alt: string } {
   };
   switch (type) {
     case 'supporter':
-      ret.src = '/badge-supporter.png';
+      ret.src = BadgeSupporter;
       ret.alt = 'supporter badge';
       break;
     default:

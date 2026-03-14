@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import Dropdown from '../../components/Dropdown';
 
+const options = ['Top', 'Latest', 'Oldest'];
+
 const CommentsSortButton = ({
-  defaultSort = 'Top',
+  defaultSort = options[0],
   onSortChange,
 }: {
   defaultSort: string;
   onSortChange: (sort: string) => void;
 }) => {
-  const { t } = useTranslation('post');
-  const options = [t('sortTop'), t('sortLatest'), t('sortOldest')];
   const [sort, _setSort] = useState(defaultSort);
   const setSort = (newVal: string) => {
     _setSort(newVal);
@@ -20,7 +19,7 @@ const CommentsSortButton = ({
   return (
     <div className="post-comments-sort">
       <Dropdown
-        target={<div className="button button-text">{t('sortBy', { sort })}</div>}
+        target={<div className="button button-text">{`Sort by: ${sort}`}</div>}
         aligned="right"
       >
         <div className="dropdown-list">

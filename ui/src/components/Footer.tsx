@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import Link from './Link';
 
 const Footer = () => {
-  const { t } = useTranslation();
   const className = 'footer';
 
+  // For some reason, on Firefox desktop, there's a small (2 pixels perhaps)
+  // white bar on the bottom of the page. This useEffect hook gets rid of that
+  // by making it the background color of the footer.
   useEffect(() => {
     const footerEl = document.querySelector(className);
     if (footerEl) {
@@ -24,19 +25,19 @@ const Footer = () => {
           <Link to="/" className="footer-logo">
             {import.meta.env.VITE_SITENAME}
           </Link>
-          <div className="footer-description">{t('footer.description')}</div>
+          <div className="footer-description">Better discussions on the internet.</div>
         </div>
         <div className="footer-col">
-          <div className="footer-title">{t('footer.organization')}</div>
+          <div className="footer-title">Organization</div>
           <Link to="/about" className="footer-item">
-            {t('sidebar.about')}
+            About
           </Link>
           <a href={`mailto:${import.meta.env.VITE_EMAILCONTACT}`} className="footer-item">
-            {t('sidebar.contact')}
+            Contact
           </a>
         </div>
         <div className="footer-col">
-          <div className="footer-title">{t('footer.social')}</div>
+          <div className="footer-title">Social</div>
           {import.meta.env.VITE_TWITTERURL && (
             <a
               href={import.meta.env.VITE_TWITTERURL}
@@ -54,7 +55,7 @@ const Footer = () => {
               target="_blank"
               rel="noopener"
             >
-              {t('footer.blog')}
+              Blog
             </a>
           )}
           {import.meta.env.VITE_FACEBOOKURL && (
@@ -99,18 +100,18 @@ const Footer = () => {
           )}
         </div>
         <div className="footer-col">
-          <div className="footer-title">{t('footer.policies')}</div>
+          <div className="footer-title">Policies</div>
           <Link className="footer-item" to="/guidelines">
-            {t('footer.siteGuidelines')}
+            Site guidelines
           </Link>
           <Link className="footer-item" to="/moderator-guidelines">
-            {t('footer.moderatorGuidelines')}
+            Moderator guidelines
           </Link>
           <Link className="footer-item" to="/terms">
-            {t('sidebar.terms')}
+            Terms
           </Link>
           <Link className="footer-item" to="/privacy-policy">
-            {t('sidebar.privacy')}
+            Privacy
           </Link>
           <a
             className="footer-item"
@@ -118,7 +119,7 @@ const Footer = () => {
             target="_blank"
             rel="noopener"
           >
-            {t('footer.documentation')}
+            Documentation
           </a>
         </div>
       </div>

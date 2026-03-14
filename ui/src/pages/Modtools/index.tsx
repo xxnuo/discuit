@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, Redirect, Route, Switch, useParams, useRouteMatch } from 'react-router-dom';
@@ -103,7 +102,6 @@ const svgs = {
 
 const Modtools = () => {
   const dispatch = useDispatch();
-  const { t } = useTranslation('modtools');
   const { name: communityName } = useParams<{ [key: string]: string }>();
 
   // Modtools resides in a protected router; hence there is always a logged in user.
@@ -148,7 +146,7 @@ const Modtools = () => {
 
   const title = (
     <span>
-      <Link to={`/${communityName}`}>+{communityName}</Link> {t('title')}
+      <Link to={`/${communityName}`}>+{communityName}</Link> Modtools
     </span>
   );
 
@@ -157,24 +155,24 @@ const Modtools = () => {
       className="modtools"
       title={title}
       sidebarMenu={[
-        { type: 'topic', name: t('settings') },
+        { type: 'topic', name: 'Settings' },
         {
-          name: t('communitySettings'),
+          name: 'Community settings',
           to: getSidebarMenuItemLink('settings'),
           icon: <SVGSettings />,
         },
-        { name: t('rules'), to: getSidebarMenuItemLink('rules'), icon: svgs.rules },
+        { name: 'Rules', to: getSidebarMenuItemLink('rules'), icon: svgs.rules },
         { type: 'topic', name: 'Content' },
-        { name: t('reports'), to: getSidebarMenuItemLink('reports'), icon: svgs.reports },
-        { name: t('removed'), to: getSidebarMenuItemLink('removed'), icon: svgs.removed },
+        { name: 'Reports', to: getSidebarMenuItemLink('reports'), icon: svgs.reports },
+        { name: 'Removed', to: getSidebarMenuItemLink('removed'), icon: svgs.removed },
         { name: 'Locked', to: getSidebarMenuItemLink('locked'), icon: svgs.locked },
         { type: 'topic', name: 'Users' },
-        { name: t('banned'), to: getSidebarMenuItemLink('banned'), icon: svgs.banned },
-        { name: t('mods'), to: getSidebarMenuItemLink('mods'), icon: svgs.mods },
+        { name: 'Banned', to: getSidebarMenuItemLink('banned'), icon: svgs.banned },
+        { name: 'Moderators', to: getSidebarMenuItemLink('mods'), icon: svgs.mods },
       ]}
     >
       <Helmet>
-        <title>{t('title')}</title>
+        <title>Modtools</title>
       </Helmet>
       <Switch>
         <Route exact path={path}>
@@ -187,7 +185,7 @@ const Modtools = () => {
           <Reports community={community} />
         </Route>
         <Route path={`${path}/removed`}>
-          <Removed community={community} filter="deleted" title={t('removed')} />
+          <Removed community={community} filter="deleted" title="Removed" />
         </Route>
         <Route path={`${path}/locked`}>
           <Removed community={community} filter="locked" title="Locked" />
@@ -202,7 +200,7 @@ const Modtools = () => {
           <Rules community={community} />
         </Route>
         <Route path="*">
-          <div className="modtools-content flex flex-center">{t('common:notFound')}</div>
+          <div className="modtools-content flex flex-center">Not found.</div>
         </Route>
       </Switch>
     </Dashboard>

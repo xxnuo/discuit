@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { Form, FormField } from '../components/Form';
@@ -8,7 +7,6 @@ import { APIError, mfetch } from '../helper';
 import { loginModalOpened, signupModalOpened, snackAlertError } from '../slices/mainSlice';
 
 const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
-  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const [username, setUsername] = useState('');
@@ -20,13 +18,13 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
   const handleLoginSubmit: React.FormEventHandler = async (event) => {
     event.preventDefault();
     if (username === '' && password === '') {
-      setLoginError(t('auth:usernameAndPasswordEmpty'));
+      setLoginError('Username and password empty.');
       return;
     } else if (username === '') {
-      setLoginError(t('auth:usernameEmptyShort'));
+      setLoginError('Username empty.');
       return;
     } else if (password === '') {
-      setLoginError(t('auth:passwordEmptyShort'));
+      setLoginError('Password empty.');
       return;
     }
     try {
@@ -41,11 +39,11 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
         window.location.reload();
       } else {
         if (res.status === 401) {
-          setLoginError(t('auth:usernamePasswordNoMatch'));
+          setLoginError('Username and password do not match.');
         } else if (res.status === 403) {
           const json = await res.json();
           if (json.code === 'account_suspended') {
-            setLoginError(t('auth:accountSuspended', { username }));
+            setLoginError(`@${username} is suspended.`);
           } else {
             throw new APIError(res.status, json);
           }
@@ -74,7 +72,7 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
 
   return (
     <Form className="login-box modal-card-content" onSubmit={handleLoginSubmit}>
-      <FormField label={t('username')}>
+      <FormField label="Username">
         <Input
           ref={usernameRef}
           value={username}
@@ -83,7 +81,7 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
           autoComplete="username"
         />
       </FormField>
-      <FormField label={t('password')}>
+      <FormField label="Password">
         <InputPassword
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -96,9 +94,9 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
         </FormField>
       )}
       <FormField className="is-submit">
-        <input type="submit" className="button button-main" value={t('login')} />
+        <input type="submit" className="button button-main" value="Login" />
         <button className="button-link" onClick={handleOnSignup}>
-          {t('auth:noAccountSignup')}
+          {"Don't have an account? Signup"}
         </button>
       </FormField>
     </Form>

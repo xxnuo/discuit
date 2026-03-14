@@ -1,6 +1,5 @@
 import clsx from 'clsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import Button, { ButtonClose } from '../../components/Button';
 import Img from '../../components/Image';
 import Modal from '../../components/Modal';
@@ -25,7 +24,6 @@ const Image = ({
   onAltTextSave,
   isEditMode = false,
 }: ImageProps) => {
-  const { t } = useTranslation(['post', 'common']);
   const { width, height } = image;
   const windowWidth = useWindowWidth();
 
@@ -86,7 +84,7 @@ const Image = ({
         <Img
           src={image.url}
           backgroundColor={image.averageColor}
-          alt={image.altText || t('post:justUploaded')}
+          alt={image.altText || 'Just uploaded'}
           style={{
             width: isMobile ? '100%' : gridImgWidth,
             height: isMobile ? 'max-content' : gridImgWidth,
@@ -97,14 +95,14 @@ const Image = ({
       <Modal open={modalOpen} onClose={handleModalClose} noOuterClickClose>
         <div className="modal-card modal-add-alt-text">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('post:addAltText')}</div>
+            <div className="modal-card-title">Add alt text</div>
             <ButtonClose onClick={handleModalClose} />
           </div>
           <div className="modal-card-content">
             <Img
               src={image.url}
               backgroundColor={image.averageColor}
-              alt={image.altText || t('post:uploadingImage')}
+              alt={image.altText || 'Just uploaded'}
               style={{
                 width: isMobile ? '100%' : imgWidth,
                 height: isMobile ? 'auto' : imgHeight,
@@ -112,7 +110,7 @@ const Image = ({
             />
             <Textarea
               className={clsx('page-new-image-alt', missingAltText && 'is-error')}
-              placeholder={t('post:altTextPlaceholder')}
+              placeholder={'Describe this image (alt text)…'}
               value={altText}
               onChange={(e) => setAltText(e.target.value)}
               maxLength={1024}
@@ -120,9 +118,9 @@ const Image = ({
           </div>
           <div className="modal-card-actions">
             <button className="button-main" onClick={handleAltTextSave}>
-              {t('common:save')}
+              Save
             </button>
-            <button onClick={handleModalCancel}>{t('common:cancel')}</button>
+            <button onClick={handleModalCancel}>Cancel</button>
           </div>
         </div>
       </Modal>

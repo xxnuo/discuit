@@ -1,6 +1,5 @@
 import PropTypes from 'prop-types';
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import CommunityProPic from '../../components/CommunityProPic';
 import DashboardPage from '../../components/Dashboard/DashboardPage';
@@ -19,7 +18,6 @@ const descriptionMaxLength = 2000;
 
 const Settings = ({ community }: { community: Community }) => {
   const dispatch = useDispatch();
-  const { t } = useTranslation(['modtools', 'common', 'community']);
 
   const user = useSelector<RootState>((state) => state.main.user) as MainState['user'];
 
@@ -42,7 +40,7 @@ const Settings = ({ community }: { community: Community }) => {
         }),
       });
       dispatch(communityAdded(rcomm));
-      dispatch(snackAlert(t('common:settingsSaved')));
+      dispatch(snackAlert('Settings saved.'));
       setChanged(-1);
     } catch (error) {
       dispatch(snackAlertError(error));
@@ -71,10 +69,10 @@ const Settings = ({ community }: { community: Community }) => {
         if (res.status === 400) {
           const error = await res.json();
           if (error.code === 'file_size_exceeded') {
-            dispatch(snackAlert(t('common:fileSizeExceeded')));
+            dispatch(snackAlert('Maximum file size exceeded.'));
             return;
           } else if (error.code === 'unsupported_image') {
-            dispatch(snackAlert(t('common:unsupportedImage')));
+            dispatch(snackAlert('Unsupported image.'));
             return;
           }
         }
@@ -149,8 +147,8 @@ const Settings = ({ community }: { community: Community }) => {
   });
 
   const handleSaveCommunityPicAlt = (altText: string) => {
-    if (!community) return dispatch(snackAlert(t('common:noCommunityToUpdate'), null));
-    if (!community.proPic) return dispatch(snackAlert(t('common:noProfilePicToUpdate'), null));
+    if (!community) return dispatch(snackAlert('No community to update.', null));
+    if (!community.proPic) return dispatch(snackAlert('No profile picture to update.', null));
     handleSaveCommunityPicAltText(altText, community.proPic.id).then((success) => {
       if (success) {
         if (community.proPic) community.proPic.altText = altText;
@@ -160,8 +158,8 @@ const Settings = ({ community }: { community: Community }) => {
   };
 
   const handleSaveCommunityBannerAlt = (altText: string) => {
-    if (!community) return dispatch(snackAlert(t('common:noCommunityToUpdate'), null));
-    if (!community.bannerImage) return dispatch(snackAlert(t('common:noBannerToUpdate'), null));
+    if (!community) return dispatch(snackAlert('No community to update.', null));
+    if (!community.bannerImage) return dispatch(snackAlert('No banner image to update.', null));
     handleSaveCommunityBannerAltText(altText, community.bannerImage.id).then((success) => {
       if (success) {
         if (community.bannerImage) community.bannerImage.altText = altText;
@@ -191,16 +189,16 @@ const Settings = ({ community }: { community: Community }) => {
   };
 
   return (
-    <DashboardPage className="modtools-settings" title={t('communitySettings')}>
+    <DashboardPage className="modtools-settings" title="Community settings">
       <div className="form">
-        <FormField label={t('common:communityName')}>
+        <FormField label="Community name">
           <Input value={community.name} disabled />
         </FormField>
-        <FormField label={t('common:profilePicture')}>
+        <FormField label="Profile picture">
           <div className=" modtools-change-propic">
             <div className="flex">
               <CommunityProPic name={community.name} proPic={community.proPic} size="standard" />
-              <button onClick={() => setCommunityPicModalOpen(true)}>{t('common:editProfilePicture')}</button>
+              <button onClick={() => setCommunityPicModalOpen(true)}>Edit profile picture</button>
 
               <input
                 ref={proPicFileInputRef}
@@ -213,11 +211,11 @@ const Settings = ({ community }: { community: Community }) => {
           </div>
         </FormField>
         <div className="form-field modtools-change-banner">
-          <div className="label">{t('common:bannerImage')}</div>
+          <div className="label">Banner image</div>
           <div className="flex flex-column">
             <Banner className="modtools-banner" community={community} />
             <div className="flex modtools-change-banner-buttons">
-              <button onClick={() => setCommunityBannerModalOpen(true)}>{t('common:editBannerImage')}</button>
+              <button onClick={() => setCommunityBannerModalOpen(true)}>Edit banner image</button>
             </div>
             <input
               ref={bannerFileInputRef}
@@ -229,8 +227,8 @@ const Settings = ({ community }: { community: Community }) => {
           </div>
         </div>
         <FormField
-          label={t('common:descriptionLabel')}
-          description={t('common:descriptionHint')}
+          label="Description"
+          description="A short description to quickly let people know what it's all about."
         >
           <InputWithCount
             textarea
@@ -240,10 +238,10 @@ const Settings = ({ community }: { community: Community }) => {
             onChange={setDescription}
           />
         </FormField>
-        <FormField label={t('common:postingRestricted')}>
+        <FormField label="Posting restricted">
           <Checkbox
             variant="switch"
-            label={t('common:postingRestrictedDesc')}
+            label="Only moderators of this community are allowed to post."
             checked={postingRestricted}
             onChange={(e) => setPostingRestricted(e.target.checked)}
             spaceBetween
@@ -252,7 +250,7 @@ const Settings = ({ community }: { community: Community }) => {
         {user && user.isAdmin && (
           <FormField>
             <button onClick={handleChangeDefault}>
-              {community.isDefault ? t('common:removeDefault') : t('common:setDefault')}
+              {community.isDefault ? 'Remove as default community' : 'Set as default community'}
             </button>
           </FormField>
         )}
@@ -263,7 +261,7 @@ const Settings = ({ community }: { community: Community }) => {
             disabled={!changed}
             style={{ width: '100%' }}
           >
-            {t('common:save')} {changed}
+            Save {changed}
           </button>
         </FormField>
       </div>
@@ -271,7 +269,7 @@ const Settings = ({ community }: { community: Community }) => {
       <ImageEditModal
         open={communityPicModalOpen}
         onClose={() => setCommunityPicModalOpen(false)}
-        title={t('community:editCommunityIcon')}
+        title="Edit community icon"
         imageUrl={community.proPic ? selectImageCopyURL('medium', community.proPic) : undefined}
         altText={community.proPic?.altText}
         onUpload={handleUploadCommunityPic}
@@ -284,7 +282,7 @@ const Settings = ({ community }: { community: Community }) => {
       <ImageEditModal
         open={communityBannerModalOpen}
         onClose={() => setCommunityBannerModalOpen(false)}
-        title={t('community:editCommunityBanner')}
+        title="Edit community banner"
         imageUrl={
           community.bannerImage ? selectImageCopyURL('medium', community.bannerImage) : undefined
         }

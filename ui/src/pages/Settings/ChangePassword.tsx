@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { ButtonClose } from '../../components/Button';
 import { FormField } from '../../components/Form';
@@ -9,7 +8,6 @@ import { APIError, mfetch } from '../../helper';
 import { snackAlert, snackAlertError } from '../../slices/mainSlice';
 
 const ChangePassword = () => {
-  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const handleClose = () => setOpen(false);
 
@@ -25,11 +23,11 @@ const ChangePassword = () => {
   const dispatch = useDispatch();
   const changePassword = async () => {
     if (newPassword !== repeatPassword) {
-      alert(t('settings:changePassword.passwordsDoNotMatch'));
+      alert('Passwords do not match.');
       return;
     }
     if (newPassword.length < 8) {
-      alert(t('settings:changePassword.passwordTooShort'));
+      alert('Password too short.');
       return;
     }
     try {
@@ -43,12 +41,12 @@ const ChangePassword = () => {
       });
       if (!res.ok) {
         if (res.status === 401) {
-          alert(t('settings:changePassword.incorrectPassword'));
+          alert('Incorrect previous password');
           return;
         }
         throw new APIError(res.status, await res.json());
       } else {
-        dispatch(snackAlert(t('settings:changePassword.success')));
+        dispatch(snackAlert('Password changed succesfully.'));
         setOpen(false);
       }
     } catch (error) {
@@ -59,12 +57,12 @@ const ChangePassword = () => {
   return (
     <>
       <button onClick={() => setOpen(true)} style={{ alignSelf: 'flex-start' }}>
-        {t('settings:changePassword.button')}
+        Change Password
       </button>
       <Modal open={open} onClose={handleClose}>
         <div className="modal-card modal-change-password">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('settings:changePassword.title')}</div>
+            <div className="modal-card-title">Change password</div>
             <ButtonClose onClick={handleClose} />
           </div>
           <div
@@ -72,17 +70,17 @@ const ChangePassword = () => {
             onKeyDown={(e) => e.key === 'Enter' && changePassword()}
             role="none"
           >
-            <FormField label={t('settings:changePassword.previousPassword')}>
+            <FormField label="Previous password">
               <InputPassword
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
               />
             </FormField>
-            <FormField label={t('settings:changePassword.newPassword')}>
+            <FormField label="New password">
               <InputPassword value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </FormField>
-            <FormField label={t('settings:changePassword.repeatPassword')}>
+            <FormField label="Repeat password">
               <InputPassword
                 value={repeatPassword}
                 onChange={(e) => setRepeatPassword(e.target.value)}
@@ -91,9 +89,9 @@ const ChangePassword = () => {
           </div>
           <div className="modal-card-actions">
             <button className="button-main" onClick={changePassword}>
-              {t('settings:changePassword.title')}
+              Change password
             </button>
-            <button onClick={handleClose}>{t('cancel')}</button>
+            <button onClick={handleClose}>Cancel</button>
           </div>
         </div>
       </Modal>

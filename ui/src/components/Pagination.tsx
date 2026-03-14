@@ -1,5 +1,3 @@
-import { useTranslation } from 'react-i18next';
-
 export interface PaginationProps {
   onClick: (page: number) => void;
   noPages: number;
@@ -7,7 +5,6 @@ export interface PaginationProps {
 }
 
 function Pagination({ onClick, noPages, current }: PaginationProps) {
-  const { t } = useTranslation();
   const renderItems = () => {
     const items: React.ReactNode[] = [];
     const pushButton = (page: number) => {
@@ -54,14 +51,14 @@ function Pagination({ onClick, noPages, current }: PaginationProps) {
           onClick={() => onClick(current - 1)}
           disabled={current - 1 < 1}
         >
-          {t('previous')}
+          Previous
         </button>
         <button
           className="pagination-item"
           onClick={() => onClick(current + 1)}
           disabled={current + 1 > noPages}
         >
-          {t('next')}
+          Next
         </button>
       </div>
     </div>

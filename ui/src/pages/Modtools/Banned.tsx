@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { ButtonClose } from '../../components/Button';
 import DashboardPage from '../../components/Dashboard/DashboardPage';
@@ -13,7 +12,6 @@ import { snackAlert, snackAlertError } from '../../slices/mainSlice';
 
 const Banned = ({ community }: { community: Community }) => {
   const dispatch = useDispatch();
-  const { t } = useTranslation('modtools');
 
   const baseURL = `/api/communities/${community.id}`;
   const [users, setUsers] = useState<User[]>([]);
@@ -51,16 +49,16 @@ const Banned = ({ community }: { community: Community }) => {
       });
       if (!res.ok) {
         if (res.status === 404) {
-          setModalError(t('userNotFoundError'));
+          setModalError('No user with username exists.');
         } else if (res.status === 409) {
-          setModalError(t('alreadyBanned', { name: username }));
+          setModalError(`${username} is already banned.`);
         } else if (res.status === 403) {
-          dispatch(snackAlert(t('forbidden'), 'forbidden'));
+          dispatch(snackAlert('Forbidden.', 'forbidden'));
         } else {
           throw new APIError(res.status, await res.json());
         }
       } else {
-        dispatch(snackAlert(t('userBanned', { name: username })));
+        dispatch(snackAlert(`@${username} is banned.`));
         const user = await res.json();
         setUsers((users) => [...users, user]);
         handleBanModalClose();
@@ -91,18 +89,18 @@ const Banned = ({ community }: { community: Community }) => {
   return (
     <DashboardPage
       className="modtools-banned"
-      title={t('bannedCount', { count: users.length })}
+      title={`Banned (${users.length})`}
       fullWidth
       titleRightContent={
         <button className="button-main" onClick={() => setBanModalOpen(true)}>
-          {t('banUser')}
+          Ban user
         </button>
       }
     >
       <Modal open={banModalOpen} onClose={handleBanModalClose}>
         <div className="modal-card">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('banUser')}</div>
+            <div className="modal-card-title">Ban user</div>
             <ButtonClose onClick={handleBanModalClose} />
           </div>
           <form
@@ -112,15 +110,15 @@ const Banned = ({ community }: { community: Community }) => {
               handleBanClick();
             }}
           >
-            <FormField label={t('username')} error={modalError}>
+            <FormField label="Username" error={modalError}>
               <Input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
             </FormField>
           </form>
           <div className="modal-card-actions">
             <button className="button-main" disabled={username === ''} onClick={handleBanClick}>
-              {t('ban')}
+              Ban
             </button>
-            <button onClick={handleBanModalClose}>{t('common:cancel')}</button>
+            <button onClick={handleBanModalClose}>Cancel</button>
           </div>
         </div>
       </Modal>
@@ -131,7 +129,7 @@ const Banned = ({ community }: { community: Community }) => {
               <div className="table-column">@{user.username}</div>
               <div className="table-column"></div>
               <div className="table-column">
-                <button onClick={() => handleUnbanClick(user.username)}>{t('unban')}</button>
+                <button onClick={() => handleUnbanClick(user.username)}>Unban</button>
               </div>
             </div>
           ))}

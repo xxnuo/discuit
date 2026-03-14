@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { ButtonClose } from '../../components/Button';
 import { FormField } from '../../components/Form';
@@ -10,7 +9,6 @@ import { User } from '../../serverTypes';
 import { snackAlertError } from '../../slices/mainSlice';
 
 const DeleteAccount = ({ user }: { user: User }) => {
-  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const [open, setOpen] = useState(false);
@@ -36,7 +34,7 @@ const DeleteAccount = ({ user }: { user: User }) => {
         }
         throw new APIError(res.status, await res.json());
       }
-      alert(t('settings:deleteAccount.success'));
+      alert('Your account is successfully deleted!');
       // Send the user to the home page.
       window.location.href = window.location.origin;
     } catch (error) {
@@ -47,30 +45,30 @@ const DeleteAccount = ({ user }: { user: User }) => {
   return (
     <>
       <button className="button-red" onClick={() => setOpen(true)}>
-        {t('settings:deleteAccount.button')}
+        Delete account
       </button>
       <Modal open={open} onClose={handleClose}>
         <div className="modal-card">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('settings:deleteAccount.title')}</div>
+            <div className="modal-card-title">Delete account</div>
             <ButtonClose onClick={handleClose} />
           </div>
           <div className="form modal-card-content">
             <div className="form-field">
-              <p>{t('settings:deleteAccount.warning')}</p>
+              <p>Proceed with caution: deleted accounts cannot be restored.</p>
             </div>
-            <FormField label={t('settings:deleteAccount.passwordLabel')} error={passwordError ? t('settings:deleteAccount.invalidPassword') : undefined}>
+            <FormField label="Password:" error={passwordError ? 'Invalid password' : undefined}>
               <InputPassword value={password} onChange={(e) => setPassword(e.target.value)} />
             </FormField>
-            <FormField label={t('settings:deleteAccount.confirmLabel')}>
+            <FormField label="Type YES to continue:">
               <Input type="text" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </FormField>
           </div>
           <div className="modal-card-actions">
             <button className="button-red" onClick={handleOnDelete} disabled={confirm !== 'YES'}>
-              {t('delete')}
+              Delete
             </button>
-            <button onClick={handleClose}>{t('cancel')}</button>
+            <button onClick={handleClose}>Cancel</button>
           </div>
         </div>
       </Modal>

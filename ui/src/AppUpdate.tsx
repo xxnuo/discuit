@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { ButtonClose } from './components/Button';
 import Modal from './components/Modal';
 import { useIsMobile } from './hooks';
@@ -13,11 +12,10 @@ export async function forceSwUpdate() {
 }
 
 function AppUpdate() {
-  const { t } = useTranslation();
   const [serviceWorkerWaiting, setServiceWorkerWaiting] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(() => forceSwUpdate(), 1000 * 60 * 2);
+    const id = setInterval(() => forceSwUpdate(), 1000 * 60 * 2); // every 2 minutes
     const listener = async () => {
       if (!document.hidden) await forceSwUpdate();
     };
@@ -84,21 +82,33 @@ function AppUpdate() {
   }, [showPrompt, serviceWorkerWaiting, isMobile]);
 
   if (showPrompt) {
+    /*
+    return (
+      <div style={{ marginTop: 'var(--navbar-height)' }}>
+        <button className="button-main" onClick={handleReload}>
+          Reload
+        </button>
+      </div>
+    );
+    */
     return (
       <Modal open={modalOpen} onClose={handleClose} noOuterClickClose>
         <div className="modal-card is-compact-mobile is-center" style={{ minWidth: '300px' }}>
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('appUpdate.title')}</div>
+            <div className="modal-card-title">Update available!</div>
             <ButtonClose onClick={handleClose} />
           </div>
           <div className="modal-card-content">
-            <p>{t('appUpdate.message')}</p>
+            <p>
+              A new version of this app is available. Reload the page to update. It won&apos;t take
+              more than a second.
+            </p>
           </div>
           <div className="modal-card-actions">
             <button className="button-main" onClick={handleReload}>
-              {t('reload')}
+              Reload
             </button>
-            <button onClick={handleClose}>{t('notNow')}</button>
+            <button onClick={handleClose}>Not now</button>
           </div>
         </div>
       </Modal>
@@ -110,6 +120,12 @@ function AppUpdate() {
 
 const localStorageKey = 'update_prompt_displayed_at';
 
+/**
+ * Returns true if the update prompt has not been displayed to the user in the
+ * last 20 minutes.
+ *
+ * @returns booleon
+ */
 function shouldDisplayUpdatePrompt() {
   const val = window.localStorage.getItem(localStorageKey);
   if (val === null) {

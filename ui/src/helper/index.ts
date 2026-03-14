@@ -1,4 +1,3 @@
-import i18n from '../i18n/i18n';
 import { Image, UserGroup } from '../serverTypes';
 
 export function stringCount(
@@ -11,19 +10,8 @@ export function stringCount(
   if (thingNameMultiple) {
     s += num === 1 ? thingName : thingNameMultiple;
   } else {
-    const knownKeys: Record<string, string> = {
-      point: 'common:point',
-      comment: 'common:comment',
-      member: 'common:member',
-      image: 'common:image',
-    };
-    const key = knownKeys[thingName];
-    if (key) {
-      s += i18n.t(key, { count: num });
-    } else {
-      s += thingName;
-      if (num !== 1) s += 's';
-    }
+    s += thingName;
+    if (num !== 1) s += 's';
   }
   return s;
 }
@@ -41,39 +29,36 @@ export function kRound(num: number) {
   return num;
 }
 
-export function timeAgo(date: string | Date, suffix?: string, justNow = true, short = false) {
-  if (suffix === undefined) {
-    suffix = i18n.t('common:timeAgo.ago');
-  }
+export function timeAgo(date: string | Date, suffix = ' ago', justNow = true, short = false) {
   if (!(date instanceof Date)) {
+    // eslint-disable-next-line no-param-reassign
     date = new Date(date);
   }
 
   const ms = (Date.now() - date.valueOf()) / 1000;
-  const t = i18n.t.bind(i18n);
 
   if (ms < 60) {
     if (justNow) {
-      return short ? '0m' : t('common:timeAgo.justNow');
+      return short ? '0m' : 'just now';
     }
     const s = Math.round(ms);
-    return `${s}${short ? 's' : ' ' + (s === 1 ? t('common:timeAgo.second') : t('common:timeAgo.seconds'))}${suffix}`;
+    return `${s}${short ? 's' : ' second'}${short || s === 1 ? '' : 's'}${suffix}`;
   } else if (ms < 3600) {
     const m = Math.round(ms / 60);
-    return `${m}${short ? 'm' : ' ' + (m === 1 ? t('common:timeAgo.minute') : t('common:timeAgo.minutes'))}${suffix}`;
+    return `${m}${short ? 'm' : ' minute'}${short || m === 1 ? '' : 's'}${suffix}`;
   } else if (ms < 24 * 3600) {
     const h = Math.round(ms / 3600);
-    return `${h}${short ? 'h' : ' ' + (h === 1 ? t('common:timeAgo.hour') : t('common:timeAgo.hours'))}${suffix}`;
+    return `${h}${short ? 'h' : ' hour'}${short || h === 1 ? '' : 's'}${suffix}`;
   } else if (ms < 7 * 24 * 3600) {
     const d = Math.round(ms / (24 * 3600));
-    return `${d}${short ? 'd' : ' ' + (d === 1 ? t('common:timeAgo.day') : t('common:timeAgo.days'))}${suffix}`;
+    return `${d}${short ? 'd' : ' day'}${short || d === 1 ? '' : 's'}${suffix}`;
   } else if (ms < 365 * 24 * 3600) {
     const w = Math.round(ms / (24 * 3600) / 7);
-    return `${w}${short ? 'w' : ' ' + (w === 1 ? t('common:timeAgo.week') : t('common:timeAgo.weeks'))}${suffix}`;
+    return `${w}${short ? 'w' : ' week'}${short || w === 1 ? '' : 's'}${suffix}`;
   }
 
   const y = Math.floor(ms / (365 * 24 * 3600));
-  return `${y}${short ? 'y' : ' ' + (y === 1 ? t('common:timeAgo.year') : t('common:timeAgo.years'))}${suffix}`;
+  return `${y}${short ? 'y' : ' year'}${short || y === 1 ? '' : 's'}${suffix}`;
 }
 
 export function isScrollbarVisible() {
@@ -136,10 +121,24 @@ export function onEscapeKey<T = HTMLDivElement>(
   }
 }
 
+// Returns date in the format of '21 February 2021'.
 export function dateString1(date: string | Date): string {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
   if (!(date instanceof Date)) date = new Date(date);
-  const monthKey = `common:months.${date.getMonth()}`;
-  return `${date.getDate()} ${i18n.t(monthKey)} ${date.getFullYear()}`;
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
 export function validEmail(emailAddress: string): boolean {
@@ -221,11 +220,11 @@ export function publicURL(path: string): string {
 export function userGroupSingular(type: UserGroup, long = false): string {
   switch (type) {
     case 'mods':
-      return long ? i18n.t('common:userGroup.modLong') : i18n.t('common:userGroup.modShort');
+      return long ? 'moderator' : 'mod';
     case 'admins':
-      return i18n.t('common:userGroup.admin');
+      return long ? 'admin' : 'admin';
     case 'normal':
-      return i18n.t('common:userGroup.user');
+      return long ? 'user' : 'user';
   }
 }
 

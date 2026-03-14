@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { kRound, mfetchjson, selectImageCopyURL } from '../../helper';
@@ -21,7 +20,6 @@ const SelectCommunity = ({
   disabled = false,
 }: SelectCommunityProps) => {
   const dispatch = useDispatch();
-  const { t } = useTranslation('post');
 
   const [suggestions, setSuggestions] = useState<Community[]>([]);
   useEffect(() => {
@@ -141,7 +139,7 @@ const SelectCommunity = ({
           ref={inputRef}
           className={'card' + (isActive ? ' is-active' : '')}
           type="text"
-          placeholder={t('selectCommunity')}
+          placeholder="Select a community"
           onFocus={handleFocus}
           onChange={handleChange}
           value={value}
@@ -177,7 +175,7 @@ const SelectCommunity = ({
                 alt=""
               />
               <div className="page-new-select-suggest-name">{s.name}</div>
-              <div className="page-new-select-suggest-detail">{kRound(s.noMembers)} {t('common:member', { count: s.noMembers })}</div>
+              <div className="page-new-select-suggest-detail">{kRound(s.noMembers)} members</div>
             </div>
           ))}
         </div>
