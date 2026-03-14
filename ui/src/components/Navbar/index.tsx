@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { useHistory, useLocation } from 'react-router-dom';
 import { clearNotificationsLocalStorage } from '../../PushNotifications';
@@ -24,7 +25,7 @@ import Link from '../Link';
 import Search from './Search';
 
 const Navbar = ({ offline = false }: { offline?: boolean }) => {
-  // Only enable background blur when scrolled down.
+  const { t } = useTranslation();
   const supportsBlur = () => window.CSS && window.CSS.supports('backdrop-filter', 'blur(10px)');
   const [blur, setBlur] = useState(supportsBlur() && window.scrollY > 50);
   const blurRef = useRef(blur);
@@ -53,7 +54,6 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
   const isMobile = windowWidth <= mobileBreakpointWidth;
   const deviceStandalone = isDeviceStandalone();
 
-  // Auto-hide the navbar when scrolling down (only on mobile).
   const recentLocationChange = useRef(false);
   const topNavbarAutohideDisabled = useSelector<RootState>(
     (state) => state.main.topNavbarAutohideDisabled
@@ -114,9 +114,6 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
         window.clearTimeout(timer);
         timer = null;
       }
-      // Without this, if you scroll down from (0, 0) and go back to (0, 0)
-      // really fast, the navbar stays hidden, presumably because not enough
-      // scroll events are being fired to run the calculations properly.
       timer = window.setTimeout(() => {
         if (window.scrollY <= navHeight) {
           setTransform(0);
@@ -166,7 +163,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
         method: 'POST',
       });
       if (!res.ok) {
-        snackAlert('Failed to logout. Something went wrong.');
+        snackAlert(t('error.failedLogout'));
         return;
       }
       window.location.reload();
@@ -212,7 +209,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
               noBackground
               icon={<SVGLongArrow />}
             >
-              Back
+              {t('common.back')}
             </Button>
           ) : (
             <>
@@ -238,12 +235,12 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
               onClick={() => dispatch(chatOpenToggled())}
               disabled={offline}
             >
-              Chat
+              {t('nav.chat')}
             </button>
           )}
           {import.meta.env.MODE !== 'production' && (
             <Link className="is-no-m" to="/elements">
-              Elements
+              {t('nav.elements')}
             </Link>
           )}
           {!loggedIn && (
@@ -253,18 +250,17 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
                 onClick={() => dispatch(loginModalOpened())}
                 disabled={offline}
               >
-                Login
+                {t('common.login')}
               </button>
               <button
                 className="button-main"
                 onClick={() => dispatch(signupModalOpened())}
                 disabled={offline}
               >
-                Create account
+                {t('nav.createAccount')}
               </button>
             </>
           )}
-          {/*<ButtonSearch />*/}
           {loggedIn && (
             <Link
               className={clsx(deviceStandalone && 'is-no-m')}
@@ -295,17 +291,16 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
             >
               <div className="dropdown-list">
                 <Link className="link-reset dropdown-item" to="/settings">
-                  Settings
+                  {t('nav.settings')}
                 </Link>
                 <Link className="link-reset dropdown-item" to={`/@${user.username}`}>
-                  Profile
+                  {t('nav.profile')}
                 </Link>
                 {user.isAdmin && (
                   <Link className="link-reset dropdown-item" to={`/admin`}>
-                    Admin dashboard
+                    {t('nav.adminDashboard')}
                   </Link>
                 )}
-                {/*<div className="dropdown-item">Darkmode</div>*/}
                 <div className="dropdown-item is-non-reactive">
                   <div className="checkbox">
                     <input
@@ -315,7 +310,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
                       checked={theme === 'dark'}
                       onChange={handleDarkModeChange}
                     />
-                    <label htmlFor={'ch-nav-dark'}>Dark mode</label>
+                    <label htmlFor={'ch-nav-dark'}>{t('nav.darkMode')}</label>
                   </div>
                 </div>
                 <div className="dropdown-list-sep"></div>
@@ -326,7 +321,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
                   onClick={handleLogout}
                   onKeyUp={(e) => onKeyEnter(e, handleLogout)}
                 >
-                  Logout
+                  {t('common.logout')}
                 </div>
               </div>
             </Dropdown>
@@ -339,7 +334,6 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
 
 export default Navbar;
 
-// This element is copy-pasted and slightly modified from SVGs.tsx.
 function SVGLongArrow() {
   return (
     <svg

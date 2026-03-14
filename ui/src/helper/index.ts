@@ -1,3 +1,4 @@
+import i18n from '../i18n/i18n';
 import { Image, UserGroup } from '../serverTypes';
 
 export function stringCount(
@@ -10,8 +11,12 @@ export function stringCount(
   if (thingNameMultiple) {
     s += num === 1 ? thingName : thingNameMultiple;
   } else {
-    s += thingName;
-    if (num !== 1) s += 's';
+    if (thingName === 'point') {
+      s += num === 1 ? i18n.t('point') : i18n.t('points');
+    } else {
+      s += thingName;
+      if (num !== 1) s += 's';
+    }
   }
   return s;
 }
@@ -29,36 +34,39 @@ export function kRound(num: number) {
   return num;
 }
 
-export function timeAgo(date: string | Date, suffix = ' ago', justNow = true, short = false) {
+export function timeAgo(date: string | Date, suffix?: string, justNow = true, short = false) {
+  if (suffix === undefined) {
+    suffix = i18n.t('timeAgo.ago');
+  }
   if (!(date instanceof Date)) {
-    // eslint-disable-next-line no-param-reassign
     date = new Date(date);
   }
 
   const ms = (Date.now() - date.valueOf()) / 1000;
+  const t = i18n.t.bind(i18n);
 
   if (ms < 60) {
     if (justNow) {
-      return short ? '0m' : 'just now';
+      return short ? '0m' : t('timeAgo.justNow');
     }
     const s = Math.round(ms);
-    return `${s}${short ? 's' : ' second'}${short || s === 1 ? '' : 's'}${suffix}`;
+    return `${s}${short ? 's' : ' ' + (s === 1 ? t('timeAgo.second') : t('timeAgo.seconds'))}${suffix}`;
   } else if (ms < 3600) {
     const m = Math.round(ms / 60);
-    return `${m}${short ? 'm' : ' minute'}${short || m === 1 ? '' : 's'}${suffix}`;
+    return `${m}${short ? 'm' : ' ' + (m === 1 ? t('timeAgo.minute') : t('timeAgo.minutes'))}${suffix}`;
   } else if (ms < 24 * 3600) {
     const h = Math.round(ms / 3600);
-    return `${h}${short ? 'h' : ' hour'}${short || h === 1 ? '' : 's'}${suffix}`;
+    return `${h}${short ? 'h' : ' ' + (h === 1 ? t('timeAgo.hour') : t('timeAgo.hours'))}${suffix}`;
   } else if (ms < 7 * 24 * 3600) {
     const d = Math.round(ms / (24 * 3600));
-    return `${d}${short ? 'd' : ' day'}${short || d === 1 ? '' : 's'}${suffix}`;
+    return `${d}${short ? 'd' : ' ' + (d === 1 ? t('timeAgo.day') : t('timeAgo.days'))}${suffix}`;
   } else if (ms < 365 * 24 * 3600) {
     const w = Math.round(ms / (24 * 3600) / 7);
-    return `${w}${short ? 'w' : ' week'}${short || w === 1 ? '' : 's'}${suffix}`;
+    return `${w}${short ? 'w' : ' ' + (w === 1 ? t('timeAgo.week') : t('timeAgo.weeks'))}${suffix}`;
   }
 
   const y = Math.floor(ms / (365 * 24 * 3600));
-  return `${y}${short ? 'y' : ' year'}${short || y === 1 ? '' : 's'}${suffix}`;
+  return `${y}${short ? 'y' : ' ' + (y === 1 ? t('timeAgo.year') : t('timeAgo.years'))}${suffix}`;
 }
 
 export function isScrollbarVisible() {
@@ -123,22 +131,9 @@ export function onEscapeKey<T = HTMLDivElement>(
 
 // Returns date in the format of '21 February 2021'.
 export function dateString1(date: string | Date): string {
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
   if (!(date instanceof Date)) date = new Date(date);
-  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  const monthKey = `months.${date.getMonth()}`;
+  return `${date.getDate()} ${i18n.t(monthKey)} ${date.getFullYear()}`;
 }
 
 export function validEmail(emailAddress: string): boolean {

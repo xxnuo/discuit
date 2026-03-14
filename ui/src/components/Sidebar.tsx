@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { MainState, sidebarScrollYUpdated, toggleSidebarOpen } from '../slices/mainSlice';
@@ -27,6 +28,7 @@ type Point = {
 };
 
 const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const user = useSelector<RootState>((state) => state.main.user) as MainState['user'];
@@ -100,7 +102,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                 fill="currentColor"
               />
             </svg>
-            <span>{expanded ? 'Show less' : `Show ${lengthLeft} more`}</span>
+            <span>{expanded ? t('sidebar.showLess') : t('sidebar.showMore', { count: lengthLeft })}</span>
           </div>
         )}
       </>
@@ -309,7 +311,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
             )}
             <Link to={homePageLink('/')} className="sidebar-item with-image" onClick={handleClose}>
               <SVGHome />
-              <span>Home</span>
+              <span>{t('sidebar.home')}</span>
             </Link>
             {loggedIn && (
               <>
@@ -331,7 +333,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                       fill="currentColor"
                     />
                   </svg>
-                  <span>{homeFeed === 'all' ? 'Subscriptions' : 'All'}</span>
+                  <span>{homeFeed === 'all' ? t('sidebar.subscriptions') : t('sidebar.all')}</span>
                 </Link>
                 <Link to="/moderating" className="sidebar-item with-image" onClick={handleClose}>
                   <svg
@@ -346,13 +348,13 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                       fill="currentColor"
                     />
                   </svg>
-                  <span>Moderating</span>
+                  <span>{t('sidebar.moderating')}</span>
                 </Link>
               </>
             )}
             <Link to="/communities" className="sidebar-item with-image" onClick={handleClose}>
               <SVGCommunities />
-              <span>Communities</span>
+              <span>{t('sidebar.communities')}</span>
             </Link>
             <Link to="/guidelines" className="sidebar-item with-image" onClick={handleClose}>
               <svg
@@ -367,7 +369,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                   fill="currentColor"
                 />
               </svg>
-              <span>Guidelines</span>
+              <span>{t('sidebar.guidelines')}</span>
             </Link>
             <Link to="/terms" className="sidebar-item with-image is-m" onClick={handleClose}>
               <svg
@@ -380,7 +382,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                 <path d="M0 0h24v24H0V0z" fill="none" />
                 <path d="M14.59 2.59c-.38-.38-.89-.59-1.42-.59H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8.83c0-.53-.21-1.04-.59-1.41l-4.82-4.83zM15 18H9c-.55 0-1-.45-1-1s.45-1 1-1h6c.55 0 1 .45 1 1s-.45 1-1 1zm0-4H9c-.55 0-1-.45-1-1s.45-1 1-1h6c.55 0 1 .45 1 1s-.45 1-1 1zm-2-6V3.5L18.5 9H14c-.55 0-1-.45-1-1z" />
               </svg>
-              <span>Terms</span>
+              <span>{t('sidebar.terms')}</span>
             </Link>
             <Link
               to="/privacy-policy"
@@ -397,7 +399,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                 <path d="M0 0h24v24H0V0z" fill="none" />
                 <path d="M16.5 12c1.38 0 2.49-1.12 2.49-2.5S17.88 7 16.5 7 14 8.12 14 9.5s1.12 2.5 2.5 2.5zM9 11c1.66 0 2.99-1.34 2.99-3S10.66 5 9 5 6 6.34 6 8s1.34 3 3 3zm7.5 3c-1.83 0-5.5.92-5.5 2.75V18c0 .55.45 1 1 1h9c.55 0 1-.45 1-1v-1.25c0-1.83-3.67-2.75-5.5-2.75zM9 13c-2.33 0-7 1.17-7 3.5V18c0 .55.45 1 1 1h6v-2.25c0-.85.33-2.34 2.37-3.47C10.5 13.1 9.66 13 9 13z" />
               </svg>
-              <span>Privacy</span>
+              <span>{t('sidebar.privacy')}</span>
             </Link>
             <a
               href={`mailto:${import.meta.env.VITE_EMAILCONTACT}`}
@@ -414,7 +416,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                 <path d="M0 0h24v24H0V0z" fill="none" />
                 <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-.4 4.25l-7.07 4.42c-.32.2-.74.2-1.06 0L4.4 8.25c-.25-.16-.4-.43-.4-.72 0-.67.73-1.07 1.3-.72L12 11l6.7-4.19c.57-.35 1.3.05 1.3.72 0 .29-.15.56-.4.72z" />
               </svg>
-              <span>Contact</span>
+              <span>{t('sidebar.contact')}</span>
             </a>
             <Link to="/about" className="sidebar-item with-image is-m" onClick={handleClose}>
               <svg
@@ -427,7 +429,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                 <path d="M0 0h24v24H0V0z" fill="none" />
                 <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm3.23 15.39L12 15.45l-3.22 1.94c-.38.23-.85-.11-.75-.54l.85-3.66-2.83-2.45c-.33-.29-.15-.84.29-.88l3.74-.32 1.46-3.45c.17-.41.75-.41.92 0l1.46 3.44 3.74.32c.44.04.62.59.28.88l-2.83 2.45.85 3.67c.1.43-.36.77-.74.54z" />
               </svg>
-              <span>About</span>
+              <span>{t('sidebar.about')}</span>
             </Link>
             {/*
           <div className="sidebar-item with-image">
@@ -462,7 +464,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
           */}
             {loggedIn && lists.length > 0 && (
               <>
-                <div className="sidebar-topic">My Lists</div>
+                <div className="sidebar-topic">{t('sidebar.myLists')}</div>
                 {lists.map((list) => (
                   <Link
                     key={list.id}
@@ -475,7 +477,7 @@ const Sidebar = ({ mobile = false }: { mobile?: boolean }) => {
                 ))}
               </>
             )}
-            <div className="sidebar-topic">{loggedIn ? 'My communities' : 'Communities'}</div>
+            <div className="sidebar-topic">{loggedIn ? t('sidebar.myCommunities') : t('sidebar.communities')}</div>
             {renderCommunitiesList()}
             {/*
           <div className="sidebar-topic">Social</div>

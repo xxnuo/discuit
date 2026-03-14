@@ -1,14 +1,16 @@
+import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 
 const Offline = () => {
+  const { t } = useTranslation();
   const handleRetry = () => window.location.reload();
   return (
     <>
       <Navbar offline />
       <div className="page-content page-notfound page-offline">
-        <h1>{"You're offline"}</h1>
-        <p>Check your internet connection.</p>
-        <button onClick={handleRetry}>Retry</button>
+        <h1>{t('offline.title')}</h1>
+        <p>{t('offline.message')}</p>
+        <button onClick={handleRetry}>{t('common.retry')}</button>
       </div>
     </>
   );

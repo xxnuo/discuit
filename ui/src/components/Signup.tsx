@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { Helmet } from 'react-helmet-async';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { usernameMaxLength } from '../config';
 import { APIError, mfetch, validEmail } from '../helper';
@@ -14,17 +15,8 @@ import { Form, FormField } from './Form';
 import Input, { InputPassword, InputWithCount } from './Input';
 import Modal from './Modal';
 
-const errors = [
-  'Username cannot be empty.',
-  'Password cannot be empty.',
-  'Username too short.',
-  'Enter a valid email address.',
-  'Password too weak.',
-  'Repeat password cannot be empty.',
-  'Passwords do not match.',
-];
-
 const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const signupsDisabled = useSelector<RootState>((state) => state.main.signupsDisabled) as boolean;
@@ -42,7 +34,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
         }
         throw new APIError(res.status, await res.json());
       }
-      setUsernameError(`${username} is already taken.`);
+      setUsernameError(t('auth.usernameTaken', { username }));
       return true;
     } catch (error) {
       dispatch(snackAlertError(error));
@@ -103,31 +95,31 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
     let errFound = false;
     if (!username) {
       errFound = true;
-      setUsernameError(errors[0]);
+      setUsernameError(t('auth.usernameEmpty'));
     } else if (username.length < 4) {
       errFound = true;
-      setUsernameError(errors[2]);
+      setUsernameError(t('auth.usernameTooShort'));
     } else if ((await checkUsernameExists()) === true) {
       errFound = true;
     }
     if (!password) {
       errFound = true;
-      setPasswordError(errors[1]);
+      setPasswordError(t('auth.passwordEmpty'));
     } else if (password.length < 8) {
       errFound = true;
-      setPasswordError(errors[4]);
+      setPasswordError(t('auth.passwordTooWeak'));
     }
     if (!repeatPassword) {
       errFound = true;
-      setRepeatPasswordError(errors[5]);
+      setRepeatPasswordError(t('auth.repeatPasswordEmpty'));
     } else if (password !== repeatPassword) {
       errFound = true;
-      setRepeatPasswordError(errors[6]);
+      setRepeatPasswordError(t('auth.passwordsDoNotMatch'));
     }
     if (email) {
       if (!validEmail(email)) {
         errFound = true;
-        setEmailError(errors[3]);
+        setEmailError(t('auth.invalidEmail'));
       }
     }
     if (errFound) {
@@ -158,17 +150,17 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
       <Modal open={open} onClose={onClose} noOuterClickClose={false}>
         <div className={clsx('modal-card modal-signup', signupsDisabled && 'is-disabled')}>
           <div className="modal-card-head">
-            <div className="modal-card-title">Signup</div>
+            <div className="modal-card-title">{t('common.signup')}</div>
             <ButtonClose onClick={onClose} />
           </div>
           <Form className="modal-card-content" onSubmit={handleSubmit}>
             {signupsDisabled && (
-              <div className="modal-signup-disabled">{`We have temporarily disabled creating new accounts. Please check back again later.`}</div>
+              <div className="modal-signup-disabled">{t('auth.signupsDisabled')}</div>
             )}
             <FormField
               className="is-username"
-              label="Username"
-              description="The name you will use when interacting with the community."
+              label={t('common.username')}
+              description={t('auth.usernameDescription')}
               error={usernameError || undefined}
             >
               <InputWithCount
@@ -182,8 +174,8 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
               />
             </FormField>
             <FormField
-              label="Email (optional)"
-              description="Without an email address, there's no way to recover your account if you lose your password."
+              label={t('auth.emailOptional')}
+              description={t('auth.emailDescription')}
               error={emailError || undefined}
             >
               <Input
@@ -193,7 +185,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
                 disabled={signupsDisabled}
               />
             </FormField>
-            <FormField label="Password" error={passwordError || undefined}>
+            <FormField label={t('common.password')} error={passwordError || undefined}>
               <InputPassword
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -201,7 +193,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
                 disabled={signupsDisabled}
               />
             </FormField>
-            <FormField label="Repeat password" error={repeatPasswordError || undefined}>
+            <FormField label={t('auth.repeatPassword')} error={repeatPasswordError || undefined}>
               <InputPassword
                 value={repeatPassword}
                 onChange={(e) => {
@@ -224,32 +216,32 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
             )}
             <FormField>
               <p className="modal-signup-terms">
-                {'By creating an account, you agree to our '}
+                {t('auth.agreeToTerms')}
                 <a target="_blank" href="/terms">
-                  Terms
+                  {t('sidebar.terms')}
                 </a>
-                {' and '}
+                {t('auth.and')}
                 <a target="_blank" href="/privacy-policy">
-                  {' Privacy Policy'}
+                  {t('auth.privacyPolicy')}
                 </a>
                 .
               </p>
               <p className="modal-signup-terms is-captcha">
-                This site is protected by reCAPTCHA and the Google{' '}
+                {t('auth.captchaProtected')}
                 <a href="https://policies.google.com/privacy-policy" target="_blank">
-                  Privacy Policy
+                  {t('auth.captchaPrivacy')}
                 </a>{' '}
-                and{' '}
+                {t('auth.and')}{' '}
                 <a href="https://policies.google.com/terms" target="_blank">
-                  Terms of Service
+                  {t('auth.captchaTerms')}
                 </a>{' '}
-                apply.
+                {t('auth.captchaApply')}
               </p>
             </FormField>
             <FormField className="is-submit">
-              <input type="submit" className="button button-main" value="Signup" />
+              <input type="submit" className="button button-main" value={t('common.signup')} />
               <button className="button-link" onClick={handleOnLogin} disabled={signupsDisabled}>
-                Already have an account? Login
+                {t('auth.alreadyHaveAccount')}
               </button>
             </FormField>
           </Form>

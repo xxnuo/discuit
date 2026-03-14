@@ -3,6 +3,7 @@ node_modules
 .idea
 /ui/dist/
 /config.yaml
+/.dev-ports.mk
 /ui-config.yaml
 /.env
 /cookies
@@ -14,3 +15,4 @@ node_modules
 .mysql
 .redis
 dump.rdb
+*.db
