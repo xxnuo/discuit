@@ -93,7 +93,7 @@ const ChangePassword = () => {
             <button className="button-main" onClick={changePassword}>
               {t('settings:changePassword.title')}
             </button>
-            <button onClick={handleClose}>{t('common.cancel')}</button>
+            <button onClick={handleClose}>{t('cancel')}</button>
           </div>
         </div>
       </Modal>

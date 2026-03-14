@@ -96,9 +96,9 @@ function AppUpdate() {
           </div>
           <div className="modal-card-actions">
             <button className="button-main" onClick={handleReload}>
-              {t('common.reload')}
+              {t('reload')}
             </button>
-            <button onClick={handleClose}>{t('common.notNow')}</button>
+            <button onClick={handleClose}>{t('notNow')}</button>
           </div>
         </div>
       </Modal>

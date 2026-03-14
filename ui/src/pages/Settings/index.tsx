@@ -297,7 +297,7 @@ const Settings = () => {
       return (
         <div className="mute-list-item">
           <CommunityLink name={community.name} proPic={community.proPic} />
-          <button onClick={() => handleUnmute(mute)}>{t('common.unmute')}</button>
+          <button onClick={() => handleUnmute(mute)}>{t('unmute')}</button>
         </div>
       );
     }
@@ -306,7 +306,7 @@ const Settings = () => {
       return (
         <div>
           <Link to={`/@${user.username}`}>@{user.username}</Link>
-          <button onClick={() => handleUnmute(mute)}>{t('common.unmute')}</button>
+          <button onClick={() => handleUnmute(mute)}>{t('unmute')}</button>
         </div>
       );
     }
@@ -330,10 +330,10 @@ const Settings = () => {
               <button onClick={() => setProfilePicModalOpen(true)}>{t('settings:editProfilePicture')}</button>
             </div>
           </FormSection>
-          <FormField label={t('common.username')} description={t('settings:usernameCannotChange')}>
+          <FormField label={t('username')} description={t('settings:usernameCannotChange')}>
             <Input value={user.username || ''} disabled />
           </FormField>
-          <FormField label={t('common.email')}>
+          <FormField label={t('email')}>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </FormField>
           <FormField label={t('settings:aboutMe')}>
@@ -489,25 +489,25 @@ const Settings = () => {
         </FormSection>
         <FormSection heading={t('settings:mutedCommunities')}>
           <div className="mutes-list">
-            {communityMutes.length === 0 && <div>{t('common.none')}</div>}
+            {communityMutes.length === 0 && <div>{t('none')}</div>}
             {communityMutes.map((mute) => renderMute(mute))}
             {communityMutes.length > 0 && (
               <button
                 style={{ alignSelf: 'flex-end' }}
                 onClick={() => handleUnmuteAll('community')}
               >
-                {t('common.unmuteAll')}
+                {t('unmuteAll')}
               </button>
             )}
           </div>
         </FormSection>
         <FormSection heading={t('settings:mutedUsers')}>
           <div className="mutes-list">
-            {userMutes.length === 0 && <div>{t('common.none')}</div>}
+            {userMutes.length === 0 && <div>{t('none')}</div>}
             {userMutes.map((mute) => renderMute(mute))}
             {userMutes.length > 0 && (
               <button style={{ alignSelf: 'flex-end' }} onClick={() => handleUnmuteAll('user')}>
-                {t('common.unmuteAll')}
+                {t('unmuteAll')}
               </button>
             )}
           </div>
@@ -519,7 +519,7 @@ const Settings = () => {
             onClick={handleSave}
             style={{ width: '100%' }}
           >
-            {t('common.save')}
+            {t('save')}
           </button>
         </FormField>
       </div>

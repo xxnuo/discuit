@@ -74,7 +74,7 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
 
   return (
     <Form className="login-box modal-card-content" onSubmit={handleLoginSubmit}>
-      <FormField label={t('common.username')}>
+      <FormField label={t('username')}>
         <Input
           ref={usernameRef}
           value={username}
@@ -83,7 +83,7 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
           autoComplete="username"
         />
       </FormField>
-      <FormField label={t('common.password')}>
+      <FormField label={t('password')}>
         <InputPassword
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -96,7 +96,7 @@ const LoginForm = ({ isModal = false }: { isModal?: boolean }) => {
         </FormField>
       )}
       <FormField className="is-submit">
-        <input type="submit" className="button button-main" value={t('common.login')} />
+        <input type="submit" className="button button-main" value={t('login')} />
         <button className="button-link" onClick={handleOnSignup}>
           {t('auth:noAccountSignup')}
         </button>

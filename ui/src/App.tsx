@@ -113,7 +113,7 @@ const App = () => {
         dispatch(initialFieldsSet(initial));
       } catch (err) {
         console.error(err);
-        dispatch(snackAlert(t('common.somethingWentWrong')));
+        dispatch(snackAlert(t('somethingWentWrong')));
       }
       setLoading('loaded');
     })();
@@ -251,7 +251,7 @@ const App = () => {
       >
         <div className="modal-card modal-form modal-login">
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('common.login')}</div>
+            <div className="modal-card-title">{t('login')}</div>
             <ButtonClose onClick={() => dispatch(loginModalOpened(false))} />
           </div>
           <LoginForm isModal />

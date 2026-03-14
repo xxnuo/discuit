@@ -98,7 +98,7 @@ const CreateCommunity = ({ open, onClose }: { open: boolean; onClose: () => void
           )}
           <FormField>
             <button onClick={handleCreate} className="button-main" style={{ width: '100%' }}>
-              {t('common.create')}
+              {t('create')}
             </button>
           </FormField>
         </div>

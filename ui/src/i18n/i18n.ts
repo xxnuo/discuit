@@ -52,7 +52,13 @@ i18n
   .init({
     ns: namespaces as unknown as string[],
     defaultNS: 'common',
-    fallbackLng: 'en',
+    supportedLngs: supportedLanguages.map((l) => l.code),
+    fallbackLng: {
+      'zh-Hans': ['zh-CN', 'en'],
+      'zh-Hant': ['zh-TW', 'en'],
+      'zh': ['zh-CN', 'en'],
+      default: ['en'],
+    },
     interpolation: {
       escapeValue: false,
     },

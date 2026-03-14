@@ -84,7 +84,7 @@ const ReportModal = ({
     <>
       {noButton ? null : (
         <button className={buttonClassName} onClick={() => setInnerOpen(true)} disabled={disabled}>
-          {t('common.report')}
+          {t('report')}
         </button>
       )}
       <Modal open={open} onClose={handleClose}>
@@ -114,9 +114,9 @@ const ReportModal = ({
           </div>
           <div className="modal-card-actions">
             <button className="button-main" onClick={handleReport} disabled={selected === null}>
-              {t('common.report')}
+              {t('report')}
             </button>
-            <button onClick={handleClose}>{t('common.cancel')}</button>
+            <button onClick={handleClose}>{t('cancel')}</button>
           </div>
         </div>
       </Modal>

@@ -150,7 +150,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
       <Modal open={open} onClose={onClose} noOuterClickClose={false}>
         <div className={clsx('modal-card modal-signup', signupsDisabled && 'is-disabled')}>
           <div className="modal-card-head">
-            <div className="modal-card-title">{t('common.signup')}</div>
+            <div className="modal-card-title">{t('signup')}</div>
             <ButtonClose onClick={onClose} />
           </div>
           <Form className="modal-card-content" onSubmit={handleSubmit}>
@@ -159,7 +159,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
             )}
             <FormField
               className="is-username"
-              label={t('common.username')}
+              label={t('username')}
               description={t('auth:usernameDescription')}
               error={usernameError || undefined}
             >
@@ -185,7 +185,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
                 disabled={signupsDisabled}
               />
             </FormField>
-            <FormField label={t('common.password')} error={passwordError || undefined}>
+            <FormField label={t('password')} error={passwordError || undefined}>
               <InputPassword
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -239,7 +239,7 @@ const Signup = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
               </p>
             </FormField>
             <FormField className="is-submit">
-              <input type="submit" className="button button-main" value={t('common.signup')} />
+              <input type="submit" className="button button-main" value={t('signup')} />
               <button className="button-link" onClick={handleOnLogin} disabled={signupsDisabled}>
                 {t('auth:alreadyHaveAccount')}
               </button>

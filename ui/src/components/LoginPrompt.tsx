@@ -32,9 +32,9 @@ const LoginPrompt = () => {
         </div>
         <div className="modal-card-content flex flex-column">
           <button className="button-main" style={{ marginBottom: '7px' }} onClick={handleLogin}>
-            {t('common.login')}
+            {t('login')}
           </button>
-          <button onClick={handleSignup}>{t('common.signup')}</button>
+          <button onClick={handleSignup}>{t('signup')}</button>
         </div>
       </div>
     </Modal>

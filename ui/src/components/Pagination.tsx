@@ -54,14 +54,14 @@ function Pagination({ onClick, noPages, current }: PaginationProps) {
           onClick={() => onClick(current - 1)}
           disabled={current - 1 < 1}
         >
-          {t('common.previous')}
+          {t('previous')}
         </button>
         <button
           className="pagination-item"
           onClick={() => onClick(current + 1)}
           disabled={current + 1 > noPages}
         >
-          {t('common.next')}
+          {t('next')}
         </button>
       </div>
     </div>

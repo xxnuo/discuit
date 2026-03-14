@@ -143,7 +143,7 @@ const AllCommunities = () => {
             {!isSearching && renderSortDropdown()}
             {!isSearching && (
               <RequestCommunityButton className="button-main is-m comms-new-button" isMobile>
-                {t('common.new')}
+                {t('new')}
               </RequestCommunityButton>
             )}
           </div>
@@ -154,7 +154,7 @@ const AllCommunities = () => {
             onFetch={fetchCommunities}
             onRenderItem={handleRenderItem}
             infiniteScrollingDisabled={isInfiniteScrollingDisabled()}
-            noMoreItemsText={t('common.nothingToShow')}
+            noMoreItemsText={t('nothingToShow')}
           />
         </div>
       </main>

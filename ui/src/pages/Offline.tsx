@@ -10,7 +10,7 @@ const Offline = () => {
       <div className="page-content page-notfound page-offline">
         <h1>{t('offline.title')}</h1>
         <p>{t('offline.message')}</p>
-        <button onClick={handleRetry}>{t('common.retry')}</button>
+        <button onClick={handleRetry}>{t('retry')}</button>
       </div>
     </>
   );

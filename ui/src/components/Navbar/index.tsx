@@ -209,7 +209,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
               noBackground
               icon={<SVGLongArrow />}
             >
-              {t('common.back')}
+              {t('back')}
             </Button>
           ) : (
             <>
@@ -250,7 +250,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
                 onClick={() => dispatch(loginModalOpened())}
                 disabled={offline}
               >
-                {t('common.login')}
+                {t('login')}
               </button>
               <button
                 className="button-main"
@@ -321,7 +321,7 @@ const Navbar = ({ offline = false }: { offline?: boolean }) => {
                   onClick={handleLogout}
                   onKeyUp={(e) => onKeyEnter(e, handleLogout)}
                 >
-                  {t('common.logout')}
+                  {t('logout')}
                 </div>
               </div>
             </Dropdown>
