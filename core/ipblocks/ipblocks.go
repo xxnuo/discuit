@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
@@ -331,7 +332,7 @@ func blockExists(ctx context.Context, db *gorm.DB, ip net.IP, maskedBits int) (b
 	var id int
 	err := msql.QueryRowContext(ctx, db, "SELECT id FROM ipblocks WHERE in_effect = true AND ip = ? AND masked_bits = ? LIMIT 1", ip.String(), maskedBits).Scan(&id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err

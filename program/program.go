@@ -2,7 +2,6 @@ package program
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -306,7 +305,7 @@ func openDatabase(driver, dsn string) (*gorm.DB, error) {
 // returning an error
 func (pg *Program) createSentinelUsers() error {
 	if _, err := pg.MigrationsStatus(); err != nil {
-		if err == ErrMigrationsTableNotFound || err == sql.ErrNoRows {
+		if err == ErrMigrationsTableNotFound || dbx.IsNotFound(err) {
 			log.Println("Skipping creating ghost user, as migrations are not yet run.")
 			return nil
 		}

@@ -1,12 +1,12 @@
 package program
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 
 	dbx "github.com/discuitnet/discuit/internal/db"
+	"gorm.io/gorm"
 )
 
 var ErrMigrationsTableNotFound = errors.New("migrations table not found")
@@ -53,7 +53,7 @@ func (pg *Program) MigrationsStatus() (MigrationsStatus, error) {
 		return MigrationsStatus{}, err
 	}
 	if status.Version == 0 && !status.Dirty {
-		return MigrationsStatus{}, sql.ErrNoRows
+		return MigrationsStatus{}, gorm.ErrRecordNotFound
 	}
 
 	dirty := 0

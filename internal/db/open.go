@@ -131,7 +131,7 @@ func SqlDB(db *gorm.DB) (*sql.DB, error) {
 	return db.DB()
 }
 
-var validDBName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+var validDBName = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
 
 func HardReset(driver string, dsn string) error {
 	drv, err := NormalizeDriver(driver)

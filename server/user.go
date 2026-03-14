@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"io"
 	"net/http"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"github.com/SherClockHolmes/webpush-go"
 	"github.com/discuitnet/discuit/core"
 	"github.com/discuitnet/discuit/core/sitesettings"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/hcaptcha"
 	"github.com/discuitnet/discuit/internal/httperr"
 	"github.com/discuitnet/discuit/internal/httputil"
@@ -183,7 +183,7 @@ func (s *Server) initial(w *responseWriter, r *request) error {
 		}
 	}
 
-	if response.ReportReasons, err = core.GetReportReasons(r.ctx, s.db); err != nil && err != sql.ErrNoRows {
+	if response.ReportReasons, err = core.GetReportReasons(r.ctx, s.db); err != nil && !idb.IsNotFound(err) {
 		return err
 	}
 
@@ -192,7 +192,7 @@ func (s *Server) initial(w *responseWriter, r *request) error {
 		commsSet = core.CommunitiesSetSubscribed
 	}
 
-	if response.Communities, err = core.GetCommunities(r.ctx, s.db, core.CommunitiesSortDefault, commsSet, -1, r.viewer); err != nil && err != sql.ErrNoRows {
+	if response.Communities, err = core.GetCommunities(r.ctx, s.db, core.CommunitiesSortDefault, commsSet, -1, r.viewer); err != nil && !idb.IsNotFound(err) {
 		return err
 	}
 	if response.NoUsers, err = core.CountAllUsers(r.ctx, s.db); err != nil {
@@ -403,7 +403,7 @@ func (s *Server) getNotification(w *responseWriter, r *request) error {
 	notifID := r.muxVar("notificationID")
 	notif, err := core.GetNotification(r.ctx, s.db, notifID, query.Get("render") == "true", core.TextFormat(query.Get("format")))
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return httperr.NewNotFound("notif_not_found", "Notification not found.")
 		}
 		return err
@@ -442,7 +442,7 @@ func (s *Server) deleteNotification(w *responseWriter, r *request) error {
 	notifID := r.muxVar("notificationID")
 	notif, err := core.GetNotification(r.ctx, s.db, notifID, query.Get("render") == "true", core.TextFormat(query.Get("format")))
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return httperr.NewNotFound("notif_not_found", "Notification not found.")
 		}
 		return err

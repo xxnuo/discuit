@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"io"
 	"net/http"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/discuitnet/discuit/core"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
@@ -583,7 +583,7 @@ func (s *Server) getCommunityReports(w *responseWriter, r *request) error {
 	}
 
 	response.Reports, err = core.GetReports(r.ctx, s.db, cid, t, limit, page)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !idb.IsNotFound(err) {
 		return err
 	}
 
