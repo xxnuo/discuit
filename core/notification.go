@@ -433,7 +433,7 @@ func scanNotifications(ctx context.Context, db *gorm.DB, rows *sql.Rows, render 
 		return nil, err
 	}
 	if len(notifs) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	for _, notif := range notifs {
@@ -612,7 +612,7 @@ func GetNotifications(ctx context.Context, db *gorm.DB, user uid.ID, limit int, 
 	}
 
 	notifs, err := scanNotifications(ctx, db, rows, render, format)
-	if err == sql.ErrNoRows {
+	if idb.IsNotFound(err) {
 		return nil, "", nil
 	}
 

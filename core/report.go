@@ -151,10 +151,7 @@ func hasUserMadeReport(ctx context.Context, db *gorm.DB, userID, targetID uid.ID
 		Take(&report).
 		Error
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -192,7 +189,7 @@ func scanReports(db *gorm.DB, rows *sql.Rows) ([]*Report, error) {
 		return nil, err
 	}
 	if len(reports) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return reports, nil

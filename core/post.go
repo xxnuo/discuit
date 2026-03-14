@@ -1594,10 +1594,9 @@ func (p *Post) UpdateVisitTime(ctx context.Context, db *gorm.DB, viewer *uid.ID,
 	}
 	id, lastVisitedAt := 0, msql.NullTime{}
 	if err := msql.QueryRowContext(ctx, db, "SELECT id, last_visited_at FROM post_visits WHERE post_id = ? AND user_id = ?", p.ID, viewer).Scan(&id, &lastVisitedAt); err != nil {
-		if err != sql.ErrNoRows {
+		if !idb.IsNotFound(err) {
 			return err
 		}
-		// if it *is* sql.ErrNoRows, id will be 0 and can use that as a check value
 	}
 	if id == 0 {
 		// never visited this post: create a timestamp

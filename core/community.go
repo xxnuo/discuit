@@ -464,7 +464,7 @@ func (c *Community) Default(ctx context.Context, db *gorm.DB) (bool, error) {
 	row := msql.QueryRowContext(ctx, db, "SELECT name_lc FROM default_communities WHERE name_lc = ?", c.NameLowerCase)
 	name := ""
 	if err := row.Scan(&name); err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			c.IsDefault = new(bool)
 			return false, nil
 		}
@@ -666,7 +666,7 @@ func (c *Community) PopulateViewerFields(ctx context.Context, db *gorm.DB, user 
 	row := msql.QueryRowContext(ctx, db, "SELECT is_mod FROM community_members WHERE community_id = ? AND user_id = ?", c.ID, user)
 	isMod := false
 	if err := row.Scan(&isMod); err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			c.ViewerJoined = msql.NewNullBool(false)
 			c.ViewerMod = msql.NewNullBool(false)
 			return nil
@@ -742,7 +742,7 @@ func IsUserBannedFromCommunity(ctx context.Context, db *gorm.DB, community, user
 	row := msql.QueryRowContext(ctx, db, "SELECT expires FROM community_banned WHERE community_id = ? AND user_id = ?", community, user)
 	var expires msql.NullTime
 	if err := row.Scan(&expires); err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -777,7 +777,7 @@ func UserMod(ctx context.Context, db *gorm.DB, community, user uid.ID) (bool, er
 	var id int
 	err := msql.QueryRowContext(ctx, db, "SELECT id FROM community_mods WHERE community_id = ? AND user_id = ?", community, user).Scan(&id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -798,7 +798,7 @@ func UserModOrAdmin(ctx context.Context, db *gorm.DB, community, user uid.ID) (b
 
 	isAdmin := false
 	if err = msql.QueryRowContext(ctx, db, "SELECT is_admin FROM users WHERE id = ?", user).Scan(&isAdmin); err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -1062,7 +1062,7 @@ func makeUserMod(ctx context.Context, db *gorm.DB, c *Community, user uid.ID, is
 		lowestPos := -1
 		row := msql.QueryRowContext(ctx, tx, "SELECT position FROM community_mods WHERE community_id = ? ORDER BY position DESC LIMIT 1", c.ID)
 		if err := row.Scan(&lowestPos); err != nil {
-			if err != sql.ErrNoRows {
+			if !idb.IsNotFound(err) {
 				return err
 			}
 		}
@@ -1099,7 +1099,7 @@ func (c *Community) AddRule(ctx context.Context, db *gorm.DB, rule, description 
 
 	zIndex := 0
 	row := msql.QueryRowContext(ctx, db, "SELECT z_index FROM community_rules WHERE community_id = ? ORDER BY z_index DESC LIMIT 1", c.ID)
-	if err := row.Scan(&zIndex); err != nil && err != sql.ErrNoRows {
+	if err := row.Scan(&zIndex); err != nil && !idb.IsNotFound(err) {
 		return err
 	}
 
@@ -1262,7 +1262,7 @@ func AddAllUsersToCommunity(ctx context.Context, db *gorm.DB, community string) 
 	var id uid.ID
 	row := msql.QueryRowContext(ctx, db, "SELECT id FROM communities WHERE name = ?", community)
 	if err := row.Scan(&id); err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return fmt.Errorf("community %v not found", community)
 		}
 		return err
@@ -1343,7 +1343,7 @@ func communityRequestExists(ctx context.Context, db *gorm.DB, byUser, name strin
 		byUser,
 		strings.ToLower(name),
 	).Scan(&id); err != nil {
-		if err != sql.ErrNoRows {
+		if !idb.IsNotFound(err) {
 			return false, err
 		}
 		return false, nil
@@ -1440,7 +1440,7 @@ func DenyCommunityRequest(ctx context.Context, db *gorm.DB, requestID int, denie
 		commName, byUser string
 	)
 	if err := msql.QueryRowContext(ctx, db, "SELECT community_name, by_user, denied_at from community_requests where id = ?", requestID).Scan(&commName, &byUser, &deniedAt); err != nil {
-		if err != sql.ErrNoRows {
+		if !idb.IsNotFound(err) {
 			return err
 		}
 		return httperr.NewBadRequest("invalid_id", "Invalid community request ID.")

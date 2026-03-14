@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -40,7 +41,7 @@ func (u UID) String() string {
 func (u UID) Value() (driver.Value, error) {
 	id := uid.ID(u)
 	if id.Zero() {
-		return "", nil
+		return nil, nil
 	}
 	return id.String(), nil
 }
@@ -169,7 +170,7 @@ func (m JSONMap) Value() (driver.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b, nil
+	return string(b), nil
 }
 
 func (m *JSONMap) Scan(src any) error {
@@ -216,7 +217,7 @@ func (l StringList) Value() (driver.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b, nil
+	return string(b), nil
 }
 
 func (l *StringList) Scan(src any) error {
@@ -267,7 +268,7 @@ func (l UIDList) Value() (driver.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b, nil
+	return string(b), nil
 }
 
 func (l *UIDList) Scan(src any) error {
@@ -437,6 +438,15 @@ func (t Timestamp) Value() (driver.Value, error) {
 	return t.Time, nil
 }
 
+var timestampLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05.999999999-07:00",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+}
+
 func (t *Timestamp) Scan(src any) error {
 	if src == nil {
 		t.Time = time.Time{}
@@ -449,15 +459,23 @@ func (t *Timestamp) Scan(src any) error {
 	case []byte:
 		return t.Scan(string(v))
 	case string:
-		parsed, err := time.Parse(time.RFC3339Nano, v)
-		if err != nil {
-			return err
+		for _, layout := range timestampLayouts {
+			if parsed, err := time.Parse(layout, v); err == nil {
+				t.Time = parsed
+				return nil
+			}
 		}
-		t.Time = parsed
-		return nil
+		return fmt.Errorf("scan timestamp: unable to parse %q", v)
 	default:
 		return fmt.Errorf("scan timestamp: unsupported type %T", src)
 	}
+}
+
+func IsNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows)
 }
 
 type contextKey string

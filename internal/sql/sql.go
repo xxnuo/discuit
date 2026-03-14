@@ -494,17 +494,5 @@ func BeginTx(ctx context.Context, db *gorm.DB) (*gorm.DB, error) {
 }
 
 func Transact(ctx context.Context, db *gorm.DB, f func(tx *gorm.DB) error) error {
-	tx, err := BeginTx(ctx, db)
-	if err != nil {
-		return err
-	}
-
-	if err := f(tx); err != nil {
-		if rErr := tx.Rollback().Error; rErr != nil {
-			return fmt.Errorf("%w (rollback error: %w)", err, rErr)
-		}
-		return err
-	}
-
-	return tx.Commit().Error
+	return db.WithContext(ctx).Transaction(f)
 }

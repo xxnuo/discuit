@@ -1,12 +1,15 @@
 package db
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
@@ -17,20 +20,38 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+type OpenOptions struct {
+	LogLevel            logger.LogLevel
+	MaxOpenConns        int
+	MaxIdleConns        int
+	ConnMaxLifetimemins int
+}
+
+var DefaultOpenOptions = OpenOptions{
+	LogLevel:            logger.Silent,
+	MaxOpenConns:        25,
+	MaxIdleConns:        5,
+	ConnMaxLifetimemins: 30,
+}
+
 func NormalizeDriver(value string) (Driver, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", string(DriverMariaDB), "mysql":
+	case string(DriverSQLite), "sqlite", "":
+		return DriverSQLite, nil
+	case string(DriverMariaDB), "mysql":
 		return DriverMariaDB, nil
 	case string(DriverPostgreSQL), "postgres":
 		return DriverPostgreSQL, nil
-	case string(DriverSQLite), "sqlite":
-		return DriverSQLite, nil
 	default:
 		return "", fmt.Errorf("unsupported db driver: %s", value)
 	}
 }
 
 func Open(driver string, dsn string) (*gorm.DB, error) {
+	return OpenWithOptions(driver, dsn, DefaultOpenOptions)
+}
+
+func OpenWithOptions(driver string, dsn string, opts OpenOptions) (*gorm.DB, error) {
 	drv, err := NormalizeDriver(driver)
 	if err != nil {
 		return nil, err
@@ -48,7 +69,7 @@ func Open(driver string, dsn string) (*gorm.DB, error) {
 
 	db, err := gorm.Open(dialector, &gorm.Config{
 		TranslateError: true,
-		Logger:         logger.Default.LogMode(logger.Silent),
+		Logger:         logger.Default.LogMode(opts.LogLevel),
 	})
 	if err != nil {
 		return nil, err
@@ -58,9 +79,36 @@ func Open(driver string, dsn string) (*gorm.DB, error) {
 		if err := db.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
 			return nil, err
 		}
+		if err := db.Exec("PRAGMA journal_mode = WAL").Error; err != nil {
+			return nil, err
+		}
+	}
+
+	if err := configurePool(db, drv, opts); err != nil {
+		return nil, err
 	}
 
 	return db, nil
+}
+
+func configurePool(db *gorm.DB, drv Driver, opts OpenOptions) error {
+	if drv == DriverSQLite {
+		return nil
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	if opts.MaxOpenConns > 0 {
+		sqlDB.SetMaxOpenConns(opts.MaxOpenConns)
+	}
+	if opts.MaxIdleConns > 0 {
+		sqlDB.SetMaxIdleConns(opts.MaxIdleConns)
+	}
+	if opts.ConnMaxLifetimemins > 0 {
+		sqlDB.SetConnMaxLifetime(time.Duration(opts.ConnMaxLifetimemins) * time.Minute)
+	}
+	return nil
 }
 
 func Ping(db *gorm.DB) error {
@@ -79,6 +127,12 @@ func Close(db *gorm.DB) error {
 	return sqlDB.Close()
 }
 
+func SqlDB(db *gorm.DB) (*sql.DB, error) {
+	return db.DB()
+}
+
+var validDBName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
 func HardReset(driver string, dsn string) error {
 	drv, err := NormalizeDriver(driver)
 	if err != nil {
@@ -94,6 +148,9 @@ func HardReset(driver string, dsn string) error {
 		dbName := cfg.DBName
 		if dbName == "" {
 			return errors.New("no database selected")
+		}
+		if !validDBName.MatchString(dbName) {
+			return fmt.Errorf("invalid database name: %q", dbName)
 		}
 		cfg.DBName = ""
 		root, err := Open(string(DriverMariaDB), cfg.FormatDSN())
@@ -116,6 +173,9 @@ func HardReset(driver string, dsn string) error {
 		dbName := cfg.Database
 		if dbName == "" {
 			return errors.New("no database selected")
+		}
+		if !validDBName.MatchString(dbName) {
+			return fmt.Errorf("invalid database name: %q", dbName)
 		}
 		cfg.Database = "postgres"
 		root, err := Open(string(DriverPostgreSQL), cfg.ConnString())
