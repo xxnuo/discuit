@@ -620,6 +620,9 @@ func (s *Server) deleteReport(w *responseWriter, r *request) error {
 	}
 	report, err := core.GetReport(r.ctx, s.db, reportID)
 	if err != nil {
+		if idb.IsNotFound(err) {
+			return httperr.NewNotFound("report_not_found", "Report not found.")
+		}
 		return err
 	}
 	if err = report.FetchTarget(r.ctx, s.db); err != nil {
