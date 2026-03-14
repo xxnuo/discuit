@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"io"
 	"net/http"
 	"strconv"
@@ -10,14 +9,16 @@ import (
 	"time"
 
 	"github.com/discuitnet/discuit/core"
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/gorilla/mux"
+	"gorm.io/gorm"
 )
 
 // userModOrAdmin returns true is user is either a mod of c or an admin or both.
-func userModOrAdmin(ctx context.Context, db *sql.DB, user uid.ID, c *core.Community) (bool, error) {
+func userModOrAdmin(ctx context.Context, db *gorm.DB, user uid.ID, c *core.Community) (bool, error) {
 	if c.ViewerMod.Bool {
 		return true, nil
 	} else {
@@ -582,7 +583,7 @@ func (s *Server) getCommunityReports(w *responseWriter, r *request) error {
 	}
 
 	response.Reports, err = core.GetReports(r.ctx, s.db, cid, t, limit, page)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !idb.IsNotFound(err) {
 		return err
 	}
 
@@ -619,6 +620,9 @@ func (s *Server) deleteReport(w *responseWriter, r *request) error {
 	}
 	report, err := core.GetReport(r.ctx, s.db, reportID)
 	if err != nil {
+		if idb.IsNotFound(err) {
+			return httperr.NewNotFound("report_not_found", "Report not found.")
+		}
 		return err
 	}
 	if err = report.FetchTarget(r.ctx, s.db); err != nil {

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,11 +11,12 @@ import (
 	"github.com/discuitnet/discuit/core/ipblocks"
 	"github.com/discuitnet/discuit/core/sitesettings"
 	"github.com/discuitnet/discuit/internal/httperr"
+	"gorm.io/gorm"
 )
 
 // getLoggedInAdmin returns the logged in admin, if the
 // logged is user is an admin, or it returns an error.
-func getLoggedInAdmin(db *sql.DB, r *request) (*core.User, error) {
+func getLoggedInAdmin(db *gorm.DB, r *request) (*core.User, error) {
 	if !r.loggedIn {
 		return nil, errNotLoggedIn
 	}
@@ -174,7 +174,7 @@ func (s *Server) getUsers(w *responseWriter, r *request) error {
 	return w.writeJSON(res)
 }
 
-func reloadTorIPBlocking(db *sql.DB, bl *ipblocks.Blocker) {
+func reloadTorIPBlocking(db *gorm.DB, bl *ipblocks.Blocker) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 

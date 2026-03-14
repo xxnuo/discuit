@@ -9,10 +9,12 @@ import (
 	"log"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/discuitnet/discuit/internal/utils"
+	"gorm.io/gorm"
 )
 
 // ContentType distinguishes between different types of user generated content
@@ -106,53 +108,66 @@ type Comment struct {
 	PostDeletedAs UserGroup `json:"postDeletedAs,omitempty"`
 }
 
+var commentSelectColumns = []string{
+	"comments.id",
+	"comments.post_id",
+	"comments.post_public_id",
+	"comments.community_id",
+	"comments.community_name",
+	"comments.user_id",
+	"comments.username",
+	"comments.user_group",
+	"comments.user_deleted",
+	"comments.parent_id",
+	"comments.depth",
+	"comments.no_replies",
+	"comments.no_replies_direct",
+	"comments.ancestors",
+	"comments.body",
+	"comments.upvotes",
+	"comments.downvotes",
+	"comments.points",
+	"comments.created_at",
+	"comments.edited_at",
+	"comments.deleted_at",
+	"comments.deleted_as",
+}
+
 func buildSelectCommentsQuery(loggedIn bool, where string) string {
-	cols := []string{
-		"comments.id",
-		"comments.post_id",
-		"comments.post_public_id",
-		"comments.community_id",
-		"comments.community_name",
-		"comments.user_id",
-		"comments.username",
-		"comments.user_group",
-		"comments.user_deleted",
-		"comments.parent_id",
-		"comments.depth",
-		"comments.no_replies",
-		"comments.no_replies_direct",
-		"comments.ancestors",
-		"comments.body",
-		"comments.upvotes",
-		"comments.downvotes",
-		"comments.points",
-		"comments.created_at",
-		"comments.edited_at",
-		"comments.deleted_at",
-		"comments.deleted_as",
-	}
+	columns := append([]string(nil), commentSelectColumns...)
 	var joins []string
 	if loggedIn {
-		cols := append(cols, "comment_votes.id IS NOT NULL", "comment_votes.up")
+		columns = append(columns, "comment_votes.id IS NOT NULL", "comment_votes.up")
 		joins = []string{"LEFT OUTER JOIN comment_votes ON comments.id = comment_votes.comment_id AND comment_votes.user_id = ?"}
-		return msql.BuildSelectQuery("comments", cols, joins, where)
 	}
-	return msql.BuildSelectQuery("comments", cols, joins, where)
+	return msql.BuildSelectQuery("comments", columns, joins, where)
+}
+
+func selectCommentsQuery(ctx context.Context, db *gorm.DB, viewer *uid.ID) *gorm.DB {
+	columns := append([]string(nil), commentSelectColumns...)
+	joins := make([]idb.Join, 0, 1)
+	if viewer != nil {
+		columns = append(columns, "comment_votes.id IS NOT NULL", "comment_votes.up")
+		joins = append(joins, idb.NewJoin("LEFT OUTER JOIN comment_votes ON comments.id = comment_votes.comment_id AND comment_votes.user_id = ?", *viewer))
+	}
+	return idb.Select(ctx, db, "comments", columns, joins...)
+}
+
+func toDBUIDList(ids []uid.ID) idb.UIDList {
+	if len(ids) == 0 {
+		return nil
+	}
+	list := make(idb.UIDList, len(ids))
+	for i, item := range ids {
+		list[i] = idb.UIDFrom(item)
+	}
+	return list
 }
 
 // Get comment returns a comment. If viewer is nil, viewer related fields of the
 // comment (like Comment.ViewerVoted) will be nil.
-func GetComment(ctx context.Context, db *sql.DB, id uid.ID, viewer *uid.ID) (*Comment, error) {
-	var (
-		query = buildSelectCommentsQuery(viewer != nil, "WHERE comments.id = ?")
-		rows  *sql.Rows
-		err   error
-	)
-	if viewer == nil {
-		rows, err = db.QueryContext(ctx, query, id)
-	} else {
-		rows, err = db.QueryContext(ctx, query, viewer, id)
-	}
+func GetComment(ctx context.Context, db *gorm.DB, id uid.ID, viewer *uid.ID) (*Comment, error) {
+	rows, err := selectCommentsQuery(ctx, db, viewer).Where("comments.id = ?", id).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -168,20 +183,18 @@ func GetComment(ctx context.Context, db *sql.DB, id uid.ID, viewer *uid.ID) (*Co
 	return comments[0], err
 }
 
-func GetCommentsByIDs(ctx context.Context, db *sql.DB, viewer *uid.ID, ids ...uid.ID) ([]*Comment, error) {
+func GetCommentsByIDs(ctx context.Context, db *gorm.DB, viewer *uid.ID, ids ...uid.ID) ([]*Comment, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-
-	where := fmt.Sprintf("WHERE comments.id IN %s", msql.InClauseQuestionMarks(len(ids)))
-	args := make([]any, len(ids))
-	for i := range ids {
-		args[i] = ids[i]
+	rows, err := selectCommentsQuery(ctx, db, viewer).Where("comments.id IN ?", ids).Rows()
+	if err != nil {
+		return nil, err
 	}
-	return getComments(ctx, db, viewer, where, args...)
+	return scanComments(ctx, db, rows, viewer)
 }
 
-func scanComments(ctx context.Context, db *sql.DB, rows *sql.Rows, viewer *uid.ID) ([]*Comment, error) {
+func scanComments(ctx context.Context, db *gorm.DB, rows *sql.Rows, viewer *uid.ID) ([]*Comment, error) {
 	defer rows.Close()
 
 	loggedIn := viewer != nil
@@ -311,7 +324,7 @@ func scanComments(ctx context.Context, db *sql.DB, rows *sql.Rows, viewer *uid.I
 
 // addComment adds a record to the comments table. It does not check if the post
 // is deleted or locked.
-func addComment(ctx context.Context, db *sql.DB, post *Post, author *User, parentID *uid.ID, commentBody string) (*Comment, error) {
+func addComment(ctx context.Context, db *gorm.DB, post *Post, author *User, parentID *uid.ID, commentBody string) (*Comment, error) {
 	commentBody = utils.TruncateUnicodeString(commentBody, maxCommentBodyLength)
 	var (
 		parent    *Comment
@@ -335,91 +348,90 @@ func addComment(ctx context.Context, db *sql.DB, post *Post, author *User, paren
 	}
 
 	id := uid.New()
-	f := func(tx *sql.Tx) error {
+	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		depth, newParentID := 0, uid.NullID{}
 		if parent != nil {
 			newParentID.Valid, newParentID.ID = true, parent.ID
 			depth = parent.Depth + 1
 		}
-		var ancestorsJSON []byte
-		if ancestors != nil {
-			if ancestorsJSON, err = json.Marshal(ancestors); err != nil {
-				return err
-			}
-		}
 		now := time.Now()
-
-		query := `	INSERT INTO comments (
-						id, 
-						post_id,
-						post_public_id,
-						community_id,
-						user_id,
-						username,
-						parent_id,
-						depth,
-						no_replies,
-						ancestors,
-						body,
-						created_at,
-						community_name) 
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-		args := []any{
-			id,
-			post.ID,
-			post.PublicID,
-			post.CommunityID,
-			author.ID,
-			author.Username,
-			newParentID,
-			depth,
-			0,
-			ancestorsJSON,
-			commentBody,
-			now,
-			post.CommunityName,
+		commentModel := &idb.Comment{
+			ID:            idb.UIDFrom(id),
+			PostID:        idb.UIDFrom(post.ID),
+			PostPublicID:  post.PublicID,
+			CommunityID:   idb.UIDFrom(post.CommunityID),
+			CommunityName: post.CommunityName,
+			UserID:        idb.UIDFrom(author.ID),
+			Username:      author.Username,
+			UserGroup:     int8(UserGroupNormal),
+			Depth:         uint8(depth),
+			NoReplies:     0,
+			Body:          &commentBody,
+			CreatedAt:     now,
 		}
-		if _, err = tx.ExecContext(ctx, query, args...); err != nil {
+		if newParentID.Valid {
+			parentDBID := idb.UIDFrom(newParentID.ID)
+			commentModel.ParentID = &parentDBID
+		}
+		if len(ancestors) > 0 {
+			commentModel.Ancestors = toDBUIDList(ancestors)
+		}
+		if err := tx.Create(commentModel).Error; err != nil {
 			return err
 		}
-
-		if _, err = tx.ExecContext(ctx, "UPDATE posts SET no_comments = no_comments + 1, last_activity_at = ? WHERE id = ?", now, post.ID); err != nil {
+		if err := tx.Model(&idb.Post{}).
+			Where("id = ?", post.ID).
+			Updates(map[string]any{
+				"no_comments":      gorm.Expr("no_comments + 1"),
+				"last_activity_at": now,
+			}).
+			Error; err != nil {
 			return err
 		}
 
 		if parent != nil {
-			if _, err = tx.ExecContext(ctx, "UPDATE comments SET no_replies_direct = no_replies_direct + 1 WHERE id = ?", parent.ID); err != nil {
+			if err := tx.Model(&idb.Comment{}).
+				Where("id = ?", parent.ID).
+				Update("no_replies_direct", gorm.Expr("no_replies_direct + 1")).
+				Error; err != nil {
 				return err
 			}
-			qs := msql.InClauseQuestionMarks(len(ancestors))
-			args := make([]any, len(ancestors))
-			for i := range args {
-				args[i] = ancestors[i]
-			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE comments SET no_replies = no_replies + 1 WHERE id IN %s", qs), args...); err != nil {
+			if err := tx.Model(&idb.Comment{}).
+				Where("id IN ?", ancestors).
+				Update("no_replies", gorm.Expr("no_replies + 1")).
+				Error; err != nil {
 				return err
 			}
 		}
-
-		// For the user profile.
-		if _, err := tx.ExecContext(ctx, "INSERT INTO posts_comments (target_id, user_id, target_type) VALUES (?, ?, ?)", id, author.ID, ContentTypeComment); err != nil {
+		if err := tx.Create(&idb.PostsComment{
+			TargetID:   idb.UIDFrom(id),
+			TargetType: int8(ContentTypeComment),
+			UserID:     idb.UIDFrom(author.ID),
+		}).Error; err != nil {
 			return err
 		}
-
-		for _, v := range ancestors {
-			if _, err := tx.ExecContext(ctx, "INSERT INTO comment_replies (parent_id, reply_id) VALUES (?, ?)", v, id); err != nil {
+		if len(ancestors) > 0 {
+			replies := make([]idb.CommentReply, len(ancestors))
+			for i, ancestor := range ancestors {
+				replies[i] = idb.CommentReply{
+					ParentID: idb.UIDFrom(ancestor),
+					ReplyID:  idb.UIDFrom(id),
+				}
+			}
+			if err := tx.Create(&replies).Error; err != nil {
 				return err
 			}
 		}
-
-		if _, err := tx.ExecContext(ctx, "UPDATE users SET no_comments = no_comments + 1 WHERE id = ?", author.ID); err != nil {
+		if err := tx.Model(&idb.User{}).
+			Where("id = ?", author.ID).
+			Update("no_comments", gorm.Expr("no_comments + 1")).
+			Error; err != nil {
 			return err
 		}
 
 		return nil
-	}
-
-	if err := msql.Transact(ctx, db, f); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -444,7 +456,7 @@ func addComment(ctx context.Context, db *sql.DB, post *Post, author *User, paren
 }
 
 // Save updates comment's body.
-func (c *Comment) Save(ctx context.Context, db *sql.DB, user uid.ID) error {
+func (c *Comment) Save(ctx context.Context, db *gorm.DB, user uid.ID) error {
 	if c.Deleted {
 		return errCommentDeleted
 	}
@@ -455,8 +467,14 @@ func (c *Comment) Save(ctx context.Context, db *sql.DB, user uid.ID) error {
 	c.Body = utils.TruncateUnicodeString(c.Body, maxCommentBodyLength)
 
 	now := time.Now()
-	query := "UPDATE comments SET body = ?, edited_at = ? WHERE id = ? AND deleted_at IS NULL"
-	_, err := db.ExecContext(ctx, query, c.Body, now, c.ID)
+	err := db.WithContext(ctx).
+		Model(&idb.Comment{}).
+		Where("id = ? AND deleted_at IS NULL", c.ID).
+		Updates(map[string]any{
+			"body":      c.Body,
+			"edited_at": now,
+		}).
+		Error
 	if err == nil {
 		c.EditedAt.Valid = true
 		c.EditedAt.Time = now
@@ -466,7 +484,7 @@ func (c *Comment) Save(ctx context.Context, db *sql.DB, user uid.ID) error {
 
 // Delete returns an error if user, who's deleting the comment, has no
 // permissions in his capacity as g to delete this comment.
-func (c *Comment) Delete(ctx context.Context, db *sql.DB, user uid.ID, g UserGroup) error {
+func (c *Comment) Delete(ctx context.Context, db *gorm.DB, user uid.ID, g UserGroup) error {
 	if c.Deleted {
 		return errCommentDeleted
 	}
@@ -497,26 +515,40 @@ func (c *Comment) Delete(ctx context.Context, db *sql.DB, user uid.ID, g UserGro
 	}
 
 	now := time.Now()
-	err := msql.Transact(ctx, db, func(tx *sql.Tx) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var newBody string
 		if g == UserGroupNormal {
 			newBody = ""
 		} else {
 			newBody = c.Body
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE comments SET body = ?, deleted_at = ?, deleted_by = ?, deleted_as = ? WHERE id = ?`, newBody, now, user, g, c.ID); err != nil {
+		if err := tx.Model(&idb.Comment{}).
+			Where("id = ?", c.ID).
+			Updates(map[string]any{
+				"body":       newBody,
+				"deleted_at": now,
+				"deleted_by": user,
+				"deleted_as": g,
+			}).
+			Error; err != nil {
 			return err
 		}
 		if g == UserGroupNormal {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM posts_comments WHERE target_id = ? AND user_id = ?", c.ID, c.AuthorID); err != nil {
+			if err := tx.Where("target_id = ? AND user_id = ?", c.ID, c.AuthorID).Delete(&idb.PostsComment{}).Error; err != nil {
 				return err
 			}
 		} else {
-			if _, err := tx.ExecContext(ctx, "UPDATE posts_comments SET deleted = true WHERE target_id = ? AND user_id = ?", c.ID, c.AuthorID); err != nil {
+			if err := tx.Model(&idb.PostsComment{}).
+				Where("target_id = ? AND user_id = ?", c.ID, c.AuthorID).
+				Update("deleted", true).
+				Error; err != nil {
 				return err
 			}
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE users SET no_comments = no_comments - 1 WHERE id = ?", c.AuthorID); err != nil {
+		if err := tx.Model(&idb.User{}).
+			Where("id = ?", c.AuthorID).
+			Update("no_comments", gorm.Expr("no_comments - 1")).
+			Error; err != nil {
 			return err
 		}
 		return nil
@@ -572,7 +604,7 @@ func (c *Comment) StripContent() {
 }
 
 // Vote votes on comment (if the comment is not deleted or the post locked).
-func (c *Comment) Vote(ctx context.Context, db *sql.DB, user uid.ID, up bool, newUserPointsThreshold int, newUserAgeThreshold time.Duration) error {
+func (c *Comment) Vote(ctx context.Context, db *gorm.DB, user uid.ID, up bool, newUserPointsThreshold int, newUserAgeThreshold time.Duration) error {
 	if c.Deleted {
 		return errCommentDeleted
 	}
@@ -584,26 +616,33 @@ func (c *Comment) Vote(ctx context.Context, db *sql.DB, user uid.ID, up bool, ne
 	}
 
 	point := 1
-	err := msql.Transact(ctx, db, func(tx *sql.Tx) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		canUserIncrementPoints, err := userAllowedToIncrementPoints(ctx, tx, user, newUserPointsThreshold, newUserAgeThreshold)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO comment_votes (comment_id, user_id, up, is_user_new) VALUES (?, ?, ?, ?)", c.ID, user, up, !canUserIncrementPoints); err != nil {
+		if err := tx.Create(&idb.CommentVote{
+			CommentID: idb.UIDFrom(c.ID),
+			UserID:    idb.UIDFrom(user),
+			Up:        up,
+			IsUserNew: !canUserIncrementPoints,
+		}).Error; err != nil {
 			if msql.IsErrDuplicateErr(err) {
 				return httperr.NewBadRequest("already-voted", "You've already voted on the comment.")
 			}
 			return err
 		}
-		query := "UPDATE comments SET points = points + ?"
+		updates := map[string]any{
+			"points": gorm.Expr("points + ?", point),
+		}
 		if up {
-			query += ", upvotes = upvotes + 1"
+			updates["upvotes"] = gorm.Expr("upvotes + 1")
 		} else {
 			point = -1
-			query += ", downvotes = downvotes + 1"
+			updates["points"] = gorm.Expr("points + ?", point)
+			updates["downvotes"] = gorm.Expr("downvotes + 1")
 		}
-		query += " WHERE id = ?"
-		if _, err := tx.ExecContext(ctx, query, point, c.ID); err != nil {
+		if err := tx.Model(&idb.Comment{}).Where("id = ?", c.ID).Updates(updates).Error; err != nil {
 			return err
 		}
 		if up && !c.AuthorID.EqualsTo(user) && canUserIncrementPoints {
@@ -640,7 +679,7 @@ func (c *Comment) Vote(ctx context.Context, db *sql.DB, user uid.ID, up bool, ne
 }
 
 // DeleteVote returns an error is the comment is deleted or the post locked.
-func (c *Comment) DeleteVote(ctx context.Context, db *sql.DB, user uid.ID) error {
+func (c *Comment) DeleteVote(ctx context.Context, db *gorm.DB, user uid.ID) error {
 	if c.Deleted {
 		return errCommentDeleted
 	}
@@ -653,27 +692,31 @@ func (c *Comment) DeleteVote(ctx context.Context, db *sql.DB, user uid.ID) error
 	}
 
 	var (
-		id      = 0
+		voteID  uint64
 		up      = false
 		userNew = false
 		point   = 1
 	)
-	err := msql.Transact(ctx, db, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, "SELECT id, up, is_user_new FROM comment_votes WHERE comment_id = ? AND user_id = ?", c.ID, user).Scan(&id, &up, &userNew); err != nil {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		vote := idb.CommentVote{}
+		if err := tx.Select("id", "up", "is_user_new").Where("comment_id = ? AND user_id = ?", c.ID, user).Take(&vote).Error; err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM comment_votes WHERE id = ?", id); err != nil {
+		voteID = vote.ID
+		up = vote.Up
+		userNew = vote.IsUserNew
+		if err := tx.Delete(&idb.CommentVote{}, voteID).Error; err != nil {
 			return err
 		}
-		query := "UPDATE comments SET points = points + ?"
+		updates := map[string]any{}
 		if up {
 			point = -1
-			query += ", upvotes = upvotes - 1"
+			updates["upvotes"] = gorm.Expr("upvotes - 1")
 		} else {
-			query += ", downvotes = downvotes - 1"
+			updates["downvotes"] = gorm.Expr("downvotes - 1")
 		}
-		query += " WHERE id = ?"
-		if _, err := tx.ExecContext(ctx, query, point, c.ID); err != nil {
+		updates["points"] = gorm.Expr("points + ?", point)
+		if err := tx.Model(&idb.Comment{}).Where("id = ?", c.ID).Updates(updates).Error; err != nil {
 			return err
 		}
 		if up && !c.AuthorID.EqualsTo(user) && !userNew {
@@ -700,7 +743,7 @@ func (c *Comment) DeleteVote(ctx context.Context, db *sql.DB, user uid.ID) error
 }
 
 // ChangeVote returns an error is the comment is deleted or the post locked.
-func (c *Comment) ChangeVote(ctx context.Context, db *sql.DB, user uid.ID, up bool) error {
+func (c *Comment) ChangeVote(ctx context.Context, db *gorm.DB, user uid.ID, up bool) error {
 	if c.Deleted {
 		return errCommentDeleted
 	}
@@ -713,32 +756,38 @@ func (c *Comment) ChangeVote(ctx context.Context, db *sql.DB, user uid.ID, up bo
 	}
 
 	var (
-		id      = 0
+		voteID  uint64
 		dbUp    = false
 		userNew = false
 		points  = 2
 		exit    = false // if true, exit clean after the transaction
 	)
-	err := msql.Transact(ctx, db, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, "SELECT id, up, is_user_new FROM comment_votes WHERE comment_id = ? AND user_id = ?", c.ID, user).Scan(&id, &dbUp, &userNew); err != nil {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		vote := idb.CommentVote{}
+		if err := tx.Select("id", "up", "is_user_new").Where("comment_id = ? AND user_id = ?", c.ID, user).Take(&vote).Error; err != nil {
 			return err
 		}
+		voteID = vote.ID
+		dbUp = vote.Up
+		userNew = vote.IsUserNew
 		if dbUp == up {
 			exit = true
 			return nil
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE comment_votes SET up = ? WHERE id = ?", up, id); err != nil {
+		if err := tx.Model(&idb.CommentVote{}).Where("id = ?", voteID).Update("up", up).Error; err != nil {
 			return err
 		}
-		query := "UPDATE comments SET points = points + ?"
+		updates := map[string]any{}
 		if dbUp {
 			points = -2
-			query += ", upvotes = upvotes - 1, downvotes = downvotes + 1"
+			updates["upvotes"] = gorm.Expr("upvotes - 1")
+			updates["downvotes"] = gorm.Expr("downvotes + 1")
 		} else {
-			query += ", upvotes = upvotes + 1, downvotes = downvotes - 1"
+			updates["upvotes"] = gorm.Expr("upvotes + 1")
+			updates["downvotes"] = gorm.Expr("downvotes - 1")
 		}
-		query += " WHERE id = ?"
-		if _, err := tx.ExecContext(ctx, query, points, c.ID); err != nil {
+		updates["points"] = gorm.Expr("points + ?", points)
+		if err := tx.Model(&idb.Comment{}).Where("id = ?", c.ID).Updates(updates).Error; err != nil {
 			return err
 		}
 		if !c.AuthorID.EqualsTo(user) && !userNew {
@@ -774,7 +823,7 @@ func (c *Comment) ChangeVote(ctx context.Context, db *sql.DB, user uid.ID, up bo
 
 // ChangeUserGroup changes the capacity in which the comment's author added the
 // post.
-func (c *Comment) ChangeUserGroup(ctx context.Context, db *sql.DB, author uid.ID, g UserGroup) error {
+func (c *Comment) ChangeUserGroup(ctx context.Context, db *gorm.DB, author uid.ID, g UserGroup) error {
 	if !c.AuthorID.EqualsTo(author) {
 		return errNotAuthor
 	}
@@ -805,7 +854,11 @@ func (c *Comment) ChangeUserGroup(ctx context.Context, db *sql.DB, author uid.ID
 		return errInvalidUserGroup
 	}
 
-	_, err := db.ExecContext(ctx, "UPDATE comments SET user_group = ? WHERE id = ? AND deleted_at IS NULL", g, c.ID)
+	err := db.WithContext(ctx).
+		Model(&idb.Comment{}).
+		Where("id = ? AND deleted_at IS NULL", c.ID).
+		Update("user_group", g).
+		Error
 	if err == nil {
 		c.PostedAs = g
 	}
@@ -813,19 +866,29 @@ func (c *Comment) ChangeUserGroup(ctx context.Context, db *sql.DB, author uid.ID
 }
 
 // loadPostDeleted populates c.PostDeleted.
-func (c *Comment) loadPostDeleted(ctx context.Context, db *sql.DB) error {
-	var at msql.NullTime
-	row := db.QueryRowContext(ctx, "SELECT deleted_at, deleted_as FROM posts WHERE id = ?", c.PostID)
-	err := row.Scan(&at, &c.PostDeletedAs)
-	if err == nil && at.Valid {
-		c.PostDeleted = true
+func (c *Comment) loadPostDeleted(ctx context.Context, db *gorm.DB) error {
+	var post struct {
+		DeletedAt msql.NullTime
+		DeletedAs UserGroup
+	}
+	err := db.WithContext(ctx).
+		Table("posts").
+		Select("deleted_at", "deleted_as").
+		Where("id = ?", c.PostID).
+		Take(&post).
+		Error
+	if err == nil {
+		c.PostDeletedAs = post.DeletedAs
+		if post.DeletedAt.Valid {
+			c.PostDeleted = true
+		}
 	}
 	return err
 }
 
 // populateCommentAuthors populates the Author field of each comment of comments
 // (except for deleted comments).
-func populateCommentAuthors(ctx context.Context, db *sql.DB, comments []*Comment, viewerAdmin bool) error {
+func populateCommentAuthors(ctx context.Context, db *gorm.DB, comments []*Comment, viewerAdmin bool) error {
 	var authorIDs []uid.ID
 	found := make(map[uid.ID]bool)
 	for _, comment := range comments {
@@ -878,7 +941,7 @@ func populateCommentAuthors(ctx context.Context, db *sql.DB, comments []*Comment
 }
 
 // GetSiteComments returns a cursor-paginated response of all comments of the site.
-func GetSiteComments(ctx context.Context, db *sql.DB, limit int, next *string, viewer *uid.ID) ([]*Comment, *string, error) {
+func GetSiteComments(ctx context.Context, db *gorm.DB, limit int, next *string, viewer *uid.ID) ([]*Comment, *string, error) {
 	where, args := "", []any{}
 	if next != nil {
 		nextID, err := uid.FromString(*next)

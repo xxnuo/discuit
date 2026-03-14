@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 // ID is an array of 12 bytes that is supposed to be composed of 8 bytes
@@ -102,23 +105,40 @@ func (d *ID) Scan(src interface{}) error {
 		return errors.New("ID scan error: src is nil")
 	}
 
-	v, ok := src.([]byte)
-	if !ok {
+	switch v := src.(type) {
+	case []byte:
+		if len(v) == len(d) {
+			if n := copy(d[:], v); n != len(d) {
+				return errors.New("ID scan error: failed to copy all bytes")
+			}
+			return nil
+		}
+		return d.UnmarshalText(v)
+	case string:
+		return d.UnmarshalText([]byte(v))
+	default:
 		return errors.New("ID scan error: src is of unknown type")
 	}
-
-	if len(v) != len(d) {
-		return fmt.Errorf("ID scan error: value is %v bytes", len(v))
-	}
-	if n := copy(d[:], v); n != len(d) {
-		return errors.New("ID scan error: failed to copy all bytes")
-	}
-	return nil
 }
 
 // Value implements driver.Valuer interface.
 func (d ID) Value() (driver.Value, error) {
-	return d[:], nil
+	return d.String(), nil
+}
+
+func (ID) GormDataType() string {
+	return "uid"
+}
+
+func (ID) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
+	switch db.Dialector.Name() {
+	case "mysql":
+		return "char(24)"
+	case "postgres":
+		return "char(24)"
+	default:
+		return "text"
+	}
 }
 
 // NullID represents an ID that may be null.

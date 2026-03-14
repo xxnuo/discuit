@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // ErrDuplicateRow is for when MySQL returns a 1062 error code.
@@ -385,6 +387,9 @@ func IsErrDuplicateErr(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
 	return strings.Contains(err.Error(), "1062")
 }
 
@@ -446,18 +451,48 @@ func BuildInsertQuery(table string, rows ...[]ColumnValue) (query string, args [
 // Transact begins a transaction and calls f. If f returns an error, the
 // transaction is rolled back and the error from f is returned (it is wrapped if
 // there's an error on rollback). Otherwise, the transaction is committed.
-func Transact(ctx context.Context, db *sql.DB, f func(tx *sql.Tx) error) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
+func QueryContext(ctx context.Context, db *gorm.DB, query string, args ...any) (*sql.Rows, error) {
+	return db.WithContext(ctx).Raw(query, args...).Rows()
+}
 
-	if err := f(tx); err != nil {
-		if rErr := tx.Rollback(); rErr != nil {
-			return fmt.Errorf("%w (rollback error: %w)", err, rErr)
-		}
-		return err
-	}
+func Query(ctxDB *gorm.DB, query string, args ...any) (*sql.Rows, error) {
+	return QueryContext(context.Background(), ctxDB, query, args...)
+}
 
-	return tx.Commit()
+func QueryRowContext(ctx context.Context, db *gorm.DB, query string, args ...any) *sql.Row {
+	return db.WithContext(ctx).Raw(query, args...).Row()
+}
+
+func QueryRow(db *gorm.DB, query string, args ...any) *sql.Row {
+	return QueryRowContext(context.Background(), db, query, args...)
+}
+
+type result struct {
+	rowsAffected int64
+}
+
+func (r result) LastInsertId() (int64, error) {
+	return 0, errors.New("last insert id unavailable")
+}
+
+func (r result) RowsAffected() (int64, error) {
+	return r.rowsAffected, nil
+}
+
+func ExecContext(ctx context.Context, db *gorm.DB, query string, args ...any) (sql.Result, error) {
+	tx := db.WithContext(ctx).Exec(query, args...)
+	return result{rowsAffected: tx.RowsAffected}, tx.Error
+}
+
+func Exec(db *gorm.DB, query string, args ...any) (sql.Result, error) {
+	return ExecContext(context.Background(), db, query, args...)
+}
+
+func BeginTx(ctx context.Context, db *gorm.DB) (*gorm.DB, error) {
+	tx := db.WithContext(ctx).Begin()
+	return tx, tx.Error
+}
+
+func Transact(ctx context.Context, db *gorm.DB, f func(tx *gorm.DB) error) error {
+	return db.WithContext(ctx).Transaction(f)
 }

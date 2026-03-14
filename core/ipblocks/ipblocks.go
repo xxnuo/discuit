@@ -13,21 +13,23 @@ import (
 	"sync"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
 	"github.com/yl2chen/cidranger"
+	"gorm.io/gorm"
 )
 
 type Blocker struct {
 	blockedNetworks cidranger.Ranger
 	blockedIPs      map[string]bool
 	mu              sync.Mutex
-	db              *sql.DB
+	db              *gorm.DB
 	torblocker      *torBlocker
 }
 
-func NewBlocker(db *sql.DB) *Blocker {
+func NewBlocker(db *gorm.DB) *Blocker {
 	return &Blocker{
 		blockedNetworks: cidranger.NewPCTrieRanger(),
 		blockedIPs:      make(map[string]bool),
@@ -185,17 +187,23 @@ func (bl *Blocker) Block(ctx context.Context, addr string, blockedBy uid.ID, exp
 		{Name: "note", Value: notePtr},
 	})
 
-	res, err := bl.db.Exec(query, args...)
-	if err != nil {
+	if _, err := msql.Exec(bl.db, query, args...); err != nil {
 		return nil, err
 	}
 
-	lastInsertId, err := res.LastInsertId()
-	if err != nil {
+	var lastInsertID int
+	if err := msql.QueryRowContext(
+		ctx,
+		bl.db,
+		"SELECT id FROM ipblocks WHERE created_by = ? AND ip = ? AND masked_bits = ? ORDER BY id DESC LIMIT 1",
+		blockedBy,
+		ip.String(),
+		maskedBits,
+	).Scan(&lastInsertID); err != nil {
 		return nil, err
 	}
 
-	block, err := GetIPBlock(ctx, bl.db, int(lastInsertId))
+	block, err := GetIPBlock(ctx, bl.db, lastInsertID)
 	if err != nil {
 		return nil, err
 	}
@@ -217,9 +225,9 @@ func (bl *Blocker) CancelBlock(ctx context.Context, blockID int) error {
 		return errors.New("block not in effect")
 	}
 
-	return msql.Transact(ctx, bl.db, func(tx *sql.Tx) error {
+	return msql.Transact(ctx, bl.db, func(tx *gorm.DB) error {
 		now := time.Now()
-		_, err := tx.Exec("UPDATE ipblocks SET in_effect = false, cancelled_at = ? WHERE id = ? AND in_effect = true", now, blockID)
+		_, err := msql.Exec(tx, "UPDATE ipblocks SET in_effect = false, cancelled_at = ? WHERE id = ? AND in_effect = true", now, blockID)
 		if err != nil {
 			return err
 		}
@@ -229,8 +237,8 @@ func (bl *Blocker) CancelBlock(ctx context.Context, blockID int) error {
 
 func (bl *Blocker) CancelExpiredBlocks(ctx context.Context) (int, error) {
 	numCancelled := 0
-	err := msql.Transact(ctx, bl.db, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, buildIPBlocksSelectQuery("WHERE ipblocks.in_effect = true AND ipblocks.expires_at <= current_timestamp()"))
+	err := msql.Transact(ctx, bl.db, func(tx *gorm.DB) error {
+		rows, err := msql.QueryContext(ctx, tx, buildIPBlocksSelectQuery("WHERE ipblocks.in_effect = true AND ipblocks.expires_at <= current_timestamp()"))
 		if err != nil {
 			return err
 		}
@@ -249,7 +257,7 @@ func (bl *Blocker) CancelExpiredBlocks(ctx context.Context) (int, error) {
 			ids = append(ids, block.ID)
 		}
 
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE ipblocks SET in_effect = false WHERE id IN %s", msql.InClauseQuestionMarks(len(ids))), ids...); err != nil {
+		if _, err := msql.ExecContext(ctx, tx, fmt.Sprintf("UPDATE ipblocks SET in_effect = false WHERE id IN %s", msql.InClauseQuestionMarks(len(ids))), ids...); err != nil {
 			return err
 		}
 
@@ -272,7 +280,7 @@ func (bl *Blocker) Len() int {
 }
 
 func (bl *Blocker) CancelAllBlocks(ctx context.Context) error {
-	_, err := bl.db.ExecContext(ctx, "UPDATE ipblocks SET in_effect = false WHERE in_effect = true")
+	_, err := msql.ExecContext(ctx, bl.db, "UPDATE ipblocks SET in_effect = false WHERE in_effect = true")
 	if err != nil {
 		return err
 	}
@@ -320,11 +328,11 @@ func (b *Block) IPNet() net.IPNet {
 	}
 }
 
-func blockExists(ctx context.Context, db *sql.DB, ip net.IP, maskedBits int) (bool, error) {
+func blockExists(ctx context.Context, db *gorm.DB, ip net.IP, maskedBits int) (bool, error) {
 	var id int
-	err := db.QueryRowContext(ctx, "SELECT id FROM ipblocks WHERE in_effect = true AND ip = ? AND masked_bits = ? LIMIT 1", ip.String(), maskedBits).Scan(&id)
+	err := msql.QueryRowContext(ctx, db, "SELECT id FROM ipblocks WHERE in_effect = true AND ip = ? AND masked_bits = ? LIMIT 1", ip.String(), maskedBits).Scan(&id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -332,8 +340,8 @@ func blockExists(ctx context.Context, db *sql.DB, ip net.IP, maskedBits int) (bo
 	return true, nil
 }
 
-func getUsersLastSeenBetweenIPs(ctx context.Context, db *sql.DB, first, last net.IP) ([]string, error) {
-	rows, err := db.QueryContext(ctx, "SELECT username FROM users WHERE last_seen_ip >= ? AND last_seen_ip <= ?", first.String(), last.String())
+func getUsersLastSeenBetweenIPs(ctx context.Context, db *gorm.DB, first, last net.IP) ([]string, error) {
+	rows, err := msql.QueryContext(ctx, db, "SELECT username FROM users WHERE last_seen_ip >= ? AND last_seen_ip <= ?", first.String(), last.String())
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +402,7 @@ func (ie InEffect) Valid() bool {
 var errInvalidInEffect = httperr.NewBadRequest("invalid-in-effect", "Invalid in_effect parameter.")
 var errInvalidResultSetNextValue = httperr.NewBadRequest("invalid-next-value", "Invalid next parameter.")
 
-func GetAllIPBlocks(ctx context.Context, db *sql.DB, inEffect InEffect, limit int, next string) (*ResultSet, error) {
+func GetAllIPBlocks(ctx context.Context, db *gorm.DB, inEffect InEffect, limit int, next string) (*ResultSet, error) {
 	if !inEffect.Valid() {
 		return nil, errInvalidInEffect
 	}
@@ -440,7 +448,7 @@ func GetAllIPBlocks(ctx context.Context, db *sql.DB, inEffect InEffect, limit in
 	}
 
 	where = fmt.Sprintf("%s ORDER BY ipblocks.in_effect DESC, ipblocks.id DESC %s", where, limitS)
-	rows, err := db.QueryContext(ctx, buildIPBlocksSelectQuery(where), args...)
+	rows, err := msql.QueryContext(ctx, db, buildIPBlocksSelectQuery(where), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -519,8 +527,8 @@ func scanIPBlocks(rows *sql.Rows) ([]*Block, error) {
 	return blocks, nil
 }
 
-func GetIPBlock(ctx context.Context, db *sql.DB, rowID int) (*Block, error) {
-	rows, err := db.QueryContext(ctx, buildIPBlocksSelectQuery("WHERE ipblocks.id = ?"), rowID)
+func GetIPBlock(ctx context.Context, db *gorm.DB, rowID int) (*Block, error) {
+	rows, err := msql.QueryContext(ctx, db, buildIPBlocksSelectQuery("WHERE ipblocks.id = ?"), rowID)
 	if err != nil {
 		return nil, err
 	}

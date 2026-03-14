@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"time"
 
+	idb "github.com/discuitnet/discuit/internal/db"
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
+	"gorm.io/gorm"
 )
 
 // ReportType represents the type of user submitted report.
@@ -88,7 +90,7 @@ var selectReportJoins = []string{
 }
 
 // NewReport creates a new report on target.
-func NewReport(ctx context.Context, db *sql.DB, community uid.ID, post uid.NullID, t ReportType, reason int, target, createdBy uid.ID) (*Report, error) {
+func NewReport(ctx context.Context, db *gorm.DB, community uid.ID, post uid.NullID, t ReportType, reason int, target, createdBy uid.ID) (*Report, error) {
 	if is, err := IsUserBannedFromCommunity(ctx, db, community, createdBy); err != nil {
 		return nil, err
 	} else if is {
@@ -103,38 +105,26 @@ func NewReport(ctx context.Context, db *sql.DB, community uid.ID, post uid.NullI
 		return nil, &httperr.Error{HTTPStatus: http.StatusConflict, Code: "already-voted", Message: "User has already voted."}
 	}
 
-	query := `
-	INSERT INTO reports (
-		community_id, 
-		post_id, 
-		reason_id, 
-		report_type, 
-		target_id, 
-		created_by
-	) VALUES (?, ?, ?, ?, ?, ?)`
-	args := []any{
-		community,
-		post,
-		reason,
-		t,
-		target,
-		createdBy,
+	record := idb.Report{
+		CommunityID: idb.UIDFrom(community),
+		ReasonID:    uint(reason),
+		ReportType:  int8(t),
+		TargetID:    idb.UIDFrom(target),
+		CreatedBy:   idb.UIDFrom(createdBy),
+	}
+	if post.Valid {
+		postID := idb.UIDFrom(post.ID)
+		record.PostID = &postID
 	}
 
-	result, err := db.ExecContext(ctx, query, args...)
-	if err != nil {
+	if err := db.WithContext(ctx).Create(&record).Error; err != nil {
 		return nil, err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	return GetReport(ctx, db, int(id))
+	return GetReport(ctx, db, int(record.ID))
 }
 
 // NewPostReport creates a report on post.
-func NewPostReport(ctx context.Context, db *sql.DB, post uid.ID, reason int, createdBy uid.ID) (*Report, error) {
+func NewPostReport(ctx context.Context, db *gorm.DB, post uid.ID, reason int, createdBy uid.ID) (*Report, error) {
 	p, err := GetPost(ctx, db, &post, "", nil, true)
 	if err != nil {
 		return nil, err
@@ -144,7 +134,7 @@ func NewPostReport(ctx context.Context, db *sql.DB, post uid.ID, reason int, cre
 }
 
 // NewCommentReport creates a report on comment.
-func NewCommentReport(ctx context.Context, db *sql.DB, comment uid.ID, reason int, createdBy uid.ID) (*Report, error) {
+func NewCommentReport(ctx context.Context, db *gorm.DB, comment uid.ID, reason int, createdBy uid.ID) (*Report, error) {
 	c, err := GetComment(ctx, db, comment, nil)
 	if err != nil {
 		return nil, err
@@ -153,12 +143,15 @@ func NewCommentReport(ctx context.Context, db *sql.DB, comment uid.ID, reason in
 	return NewReport(ctx, db, c.CommunityID, ni, ReportTypeComment, reason, c.ID, createdBy)
 }
 
-func hasUserMadeReport(ctx context.Context, db *sql.DB, userID, targetID uid.ID, t ReportType, reasonID int) (bool, error) {
-	row := db.QueryRowContext(ctx, "SELECT id FROM reports WHERE created_by = ? AND target_id = ? AND report_type = ? AND reason_id = ?",
-		userID, targetID, t, reasonID)
-	id := 0
-	if err := row.Scan(&id); err != nil {
-		if err == sql.ErrNoRows {
+func hasUserMadeReport(ctx context.Context, db *gorm.DB, userID, targetID uid.ID, t ReportType, reasonID int) (bool, error) {
+	var report idb.Report
+	err := db.WithContext(ctx).
+		Select("id").
+		Where("created_by = ? AND target_id = ? AND report_type = ? AND reason_id = ?", userID, targetID, t, reasonID).
+		Take(&report).
+		Error
+	if err != nil {
+		if idb.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -166,7 +159,7 @@ func hasUserMadeReport(ctx context.Context, db *sql.DB, userID, targetID uid.ID,
 	return true, nil
 }
 
-func scanReports(db *sql.DB, rows *sql.Rows) ([]*Report, error) {
+func scanReports(db *gorm.DB, rows *sql.Rows) ([]*Report, error) {
 	defer rows.Close()
 
 	var reports []*Report
@@ -196,16 +189,17 @@ func scanReports(db *sql.DB, rows *sql.Rows) ([]*Report, error) {
 		return nil, err
 	}
 	if len(reports) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return reports, nil
 }
 
 // GetReport returns an error if the report is not found.
-func GetReport(ctx context.Context, db *sql.DB, reportID int) (*Report, error) {
-	query := msql.BuildSelectQuery("reports", selectReportCols, selectReportJoins, "WHERE reports.id = ?")
-	rows, err := db.QueryContext(ctx, query, reportID)
+func GetReport(ctx context.Context, db *gorm.DB, reportID int) (*Report, error) {
+	rows, err := idb.Select(ctx, db, "reports", selectReportCols, idb.NewJoin(selectReportJoins[0])).
+		Where("reports.id = ?", reportID).
+		Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +213,7 @@ func GetReport(ctx context.Context, db *sql.DB, reportID int) (*Report, error) {
 
 // FetchTarget populates r.Target with the target object on which the report was
 // made.
-func (r *Report) FetchTarget(ctx context.Context, db *sql.DB) error {
+func (r *Report) FetchTarget(ctx context.Context, db *gorm.DB) error {
 	if r.Type == ReportTypePost {
 		post, err := GetPost(ctx, db, &r.TargetID, "", nil, true)
 		if err != nil {
@@ -239,40 +233,24 @@ func (r *Report) FetchTarget(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// // TakeAction takes action on r by moderator mod.
-// func (r *Report) TakeAction(ctx context.Context, action string, mod luid.ID) error {
-// 	now := time.Now()
-// 	_, err := r.db.ExecContext(ctx, "UPDATE reports SET action_taken = ?, dealt_at = ?, dealt_by = ? WHERE id = ?", action, now, mod, r.ID)
-// 	if err == nil {
-// 		r.ActionTaken = msql.NewNullString(action)
-// 		r.DealtBy.Valid, r.DealtBy.ID = true, mod
-// 		r.DealtAt = msql.NewNullTime(now)
-// 	}
-// 	return err
-// }
-
 // Delete deletes the report permanently.
-func (r *Report) Delete(ctx context.Context, db *sql.DB, mod uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM reports WHERE id = ?", r.ID)
-	return err
+func (r *Report) Delete(ctx context.Context, db *gorm.DB, mod uid.ID) error {
+	return db.WithContext(ctx).Where("id = ?", r.ID).Delete(&idb.Report{}).Error
 }
 
 // GetReports retrives user submitted reports in community. The results are paginated.
-func GetReports(ctx context.Context, db *sql.DB, community uid.ID, t ReportType, limit, page int) ([]*Report, error) {
-	query := msql.BuildSelectQuery("reports", selectReportCols, selectReportJoins, "WHERE reports.community_id = ?")
-	if t != ReportTypeAll {
-		query += " AND report_type = ?"
-	}
-	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-
-	var rows *sql.Rows
-	var err error
+func GetReports(ctx context.Context, db *gorm.DB, community uid.ID, t ReportType, limit, page int) ([]*Report, error) {
 	offset := limit * (page - 1)
-	if t == ReportTypeAll {
-		rows, err = db.QueryContext(ctx, query, community, limit, offset)
-	} else {
-		rows, err = db.QueryContext(ctx, query, community, t, limit, offset)
+	query := idb.Select(ctx, db, "reports", selectReportCols, idb.NewJoin(selectReportJoins[0])).
+		Where("reports.community_id = ?", community).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset)
+	if t != ReportTypeAll {
+		query = query.Where("report_type = ?", t)
 	}
+
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -298,9 +276,9 @@ type ReportReason struct {
 
 // GetReportReasons returns all report reasons. These are supposed to be about a
 // dozen at most.
-func GetReportReasons(ctx context.Context, db *sql.DB) ([]ReportReason, error) {
+func GetReportReasons(ctx context.Context, db *gorm.DB) ([]ReportReason, error) {
 	var all []ReportReason
-	rows, err := db.QueryContext(ctx, "SELECT id, title, description, created_at FROM report_reasons")
+	rows, err := idb.Select(ctx, db, "report_reasons", []string{"id", "title", "description", "created_at"}).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -319,17 +297,17 @@ func GetReportReasons(ctx context.Context, db *sql.DB) ([]ReportReason, error) {
 	return all, nil
 }
 
-func RemoveAllReportsOfCommunity(ctx context.Context, db *sql.DB, community uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM reports WHERE community_id = ?", community)
-	return err
+func RemoveAllReportsOfCommunity(ctx context.Context, db *gorm.DB, community uid.ID) error {
+	return db.WithContext(ctx).Where("community_id = ?", community).Delete(&idb.Report{}).Error
 }
 
-func RemoveAllReportsOfPost(ctx context.Context, db *sql.DB, post uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM reports WHERE post_id = ?", post)
-	return err
+func RemoveAllReportsOfPost(ctx context.Context, db *gorm.DB, post uid.ID) error {
+	return db.WithContext(ctx).Where("post_id = ?", post).Delete(&idb.Report{}).Error
 }
 
-func RemoveAllReportsOfComment(ctx context.Context, db *sql.DB, comment uid.ID) error {
-	_, err := db.ExecContext(ctx, "DELETE FROM reports WHERE target_id = ? AND report_type = ?", comment, ReportTypeComment)
-	return err
+func RemoveAllReportsOfComment(ctx context.Context, db *gorm.DB, comment uid.ID) error {
+	return db.WithContext(ctx).
+		Where("target_id = ? AND report_type = ?", comment, ReportTypeComment).
+		Delete(&idb.Report{}).
+		Error
 }

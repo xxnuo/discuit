@@ -1,10 +1,14 @@
 node_modules
 .vscode
-/ui/dist/
+.git
+.github
 /config.yaml
 /ui-config.yaml
 /.env
 /cookies
 /logs
 /discuit
+/discuit.db
 /images
+/ui/
+/.dev-ports.mk

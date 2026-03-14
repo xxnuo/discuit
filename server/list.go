@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"io"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"github.com/discuitnet/discuit/internal/httperr"
 	msql "github.com/discuitnet/discuit/internal/sql"
 	"github.com/discuitnet/discuit/internal/uid"
+	"gorm.io/gorm"
 )
 
 // /api/users/{username}/lists [GET, POST]
@@ -93,7 +93,7 @@ func (s *Server) handleLists(w *responseWriter, r *request) error {
 	return w.writeJSON(lists)
 }
 
-func viewerListOwner(r *request, db *sql.DB, list *core.List) (bool, error) {
+func viewerListOwner(r *request, db *gorm.DB, list *core.List) (bool, error) {
 	if !r.loggedIn {
 		return false, nil
 	}

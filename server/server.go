@@ -1,21 +1,15 @@
 package server
 
 import (
-	"compress/gzip"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
-	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,8 +25,7 @@ import (
 	"github.com/discuitnet/discuit/internal/utils"
 	"github.com/gomodule/redigo/redis"
 	"github.com/gorilla/mux"
-	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
+	"gorm.io/gorm"
 )
 
 var (
@@ -48,22 +41,16 @@ var (
 type Server struct {
 	config *config.Config
 
-	db        *sql.DB
+	db        *gorm.DB
 	redisPool *redis.Pool
 
-	// for /api routes
 	router *mux.Router
 
-	// for all other routes
-	staticRouter *mux.Router
+	imagesRouter *mux.Router
 
 	sessions *sessions.RedisStore
 
 	ipblocks *ipblocks.Blocker
-
-	// react serve
-	reactPath  string
-	reactIndex string
 
 	httpLogger        *log.Logger
 	httpLoggerFile    *os.File
@@ -73,7 +60,7 @@ type Server struct {
 	webPushVAPIDKeys core.VAPIDKeys
 }
 
-func New(db *sql.DB, conf *config.Config) (*Server, error) {
+func New(db *gorm.DB, conf *config.Config) (*Server, error) {
 	r := mux.NewRouter()
 
 	redisStore, err := sessions.NewRedisStore("tcp", conf.RedisAddress, conf.SessionCookieName)
@@ -90,11 +77,9 @@ func New(db *sql.DB, conf *config.Config) (*Server, error) {
 			Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", conf.RedisAddress) },
 		},
 		router:       r,
-		staticRouter: mux.NewRouter(),
+		imagesRouter: mux.NewRouter(),
 		sessions:     redisStore,
 		config:       conf,
-		reactPath:    "./ui/dist/",
-		reactIndex:   "index.html",
 		ipblocks:     ipblocks.NewBlocker(db),
 	}
 
@@ -207,24 +192,11 @@ func New(db *sql.DB, conf *config.Config) (*Server, error) {
 	r.MethodNotAllowedHandler = http.HandlerFunc(s.apiMethodNotAllowedHandler)
 
 	images.HMACKey = []byte(conf.HMACSecret)
-	s.staticRouter.PathPrefix("/images/").Handler(&images.Server{
+	s.imagesRouter.PathPrefix("/images/").Handler(&images.Server{
 		SkipHashCheck: conf.IsDevelopment,
 		DB:            db,
 		EnableCORS:    true,
 	})
-
-	if conf.UIProxy != "" {
-		s.staticRouter.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ses, err := s.sessions.Get(r)
-			if err == nil {
-				s.setInitialCookies(w, r, ses)
-			}
-
-			httputil.ProxyRequest(w, r, conf.UIProxy+r.URL.Path)
-		})
-	} else {
-		s.staticRouter.PathPrefix("/").HandlerFunc(s.serveSPA)
-	}
 
 	if err := s.ipblocks.LoadDatabaseBlocks(context.Background()); err != nil {
 		return nil, fmt.Errorf("error loading database blocks: %v", err)
@@ -284,7 +256,7 @@ func (s *Server) Close() error {
 // updateUserLastSeen updates the last seen time and the last seen IP address of
 // the logged in user, if the user is logged in, in Redis and persists it to
 // MariaDB.
-func updateUserLastSeen(ctx context.Context, w http.ResponseWriter, r *http.Request, db *sql.DB, ses *sessions.Session) error {
+func updateUserLastSeen(ctx context.Context, w http.ResponseWriter, r *http.Request, db *gorm.DB, ses *sessions.Session) error {
 	loggedIn, uid := isLoggedIn(ses)
 	if !loggedIn {
 		return nil
@@ -444,23 +416,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch r.URL.Path {
-	case "/robots.txt":
-		http.ServeFile(w, r, "./robots.txt")
-	case "/manifest.json":
-		w.Header().Add("Cache-Control", "no-cache")
-		http.ServeFile(w, r, "./ui/dist/manifest.json")
-	default:
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			w.Header().Add("Content-Type", "application/json; charset=UTF-8")
-			w.Header().Add("Cache-Control", "no-store")
-			httputil.GzipHandler(s.router).ServeHTTP(w, r)
-		} else {
-			s.staticRouter.ServeHTTP(w, r)
-		}
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		w.Header().Add("Content-Type", "application/json; charset=UTF-8")
+		w.Header().Add("Cache-Control", "no-store")
+		httputil.GzipHandler(s.router).ServeHTTP(w, r)
+	} else if strings.HasPrefix(r.URL.Path, "/images/") {
+		s.imagesRouter.ServeHTTP(w, r)
+	} else {
+		s.writeErrorCustom(w, r, http.StatusNotFound, "Not found", "not_found")
 	}
 
-	sid := "" // session id
+	sid := ""
 	if c, err := r.Cookie(s.config.SessionCookieName); err == nil {
 		sid = c.Value
 	}
@@ -565,409 +531,12 @@ func (s *Server) writeErrorTooManyRequests(w http.ResponseWriter, r *http.Reques
 	s.writeErrorCustom(w, r, http.StatusTooManyRequests, "Too many requests", code)
 }
 
-// findNodeElement returns the first encountered NodeElement with a tag of
-// name.
-func findNodeElement(n *html.Node, name string) *html.Node {
-	if n.Type == html.ElementNode && n.Data == name {
-		return n
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if body := findNodeElement(c, name); body != nil {
-			return body
-		}
-	}
-	return nil
-}
 
-func setTitle(doc *html.Node, title, siteName string) {
-	title = title + " - " + siteName
-	head := findNodeElement(doc, "head")
-	var before *html.Node
-	for n := head.FirstChild; n != nil; n = n.NextSibling {
-		if n.Type == html.ElementNode && n.Data == "title" {
-			before = n.NextSibling
-			n.Parent.RemoveChild(n)
-			break
-		}
-	}
 
-	node := &html.Node{
-		Type:     html.ElementNode,
-		DataAtom: atom.Title,
-		Data:     "title",
-	}
-	node.AppendChild(&html.Node{
-		Type: html.TextNode,
-		Data: title,
-	})
-	head.InsertBefore(node, before)
-}
-
-// appendMetaTag appends a meta tag with attr attributes before the last
-// existing identical meta tag in head or, if none found, to the end of head.
-// It also deletes similar meta tags already in head (if they have attribute
-// keys of name or property).
-func appendMetaTag(doc *html.Node, attr []html.Attribute) {
-	head := findNodeElement(doc, "head")
-
-	var before *html.Node
-	removeMetaTag := func(key, val string) {
-		for n := head.FirstChild; n != nil; n = n.NextSibling {
-			if n.Type == html.ElementNode && n.Data == "meta" {
-				for _, item := range n.Attr {
-					if item.Key == key && item.Val == val {
-						before = n.NextSibling
-						n.Parent.RemoveChild(n)
-						return
-					}
-				}
-			}
-		}
-	}
-
-	for _, item := range attr {
-		if item.Key == "name" || item.Key == "property" {
-			removeMetaTag(item.Key, item.Val)
-			break
-		}
-	}
-
-	if before == nil {
-		for n := head.FirstChild; n != nil; n = n.NextSibling {
-			if n.Type == html.ElementNode && n.Data == "meta" {
-				before = n.NextSibling
-			}
-		}
-	}
-
-	node := &html.Node{
-		Type:     html.ElementNode,
-		DataAtom: atom.Meta,
-		Data:     "meta",
-		Attr:     attr,
-	}
-
-	head.InsertBefore(node, before)
-}
-
-// fixOgImageTag substitues relative og:image url for an absolute one. It does
-// the same for twitter:image meta tag.
-func fixOgImageTag(doc *html.Node, toAbsolute func(string) string) {
-	head := findNodeElement(doc, "head")
-	fix := func(key, val string) {
-		var ogImage *html.Node
-	out:
-		for n := head.FirstChild; n != nil; n = n.NextSibling {
-			if n.Type == html.ElementNode && n.Data == "meta" {
-				for _, item := range n.Attr {
-					if item.Key == key && item.Val == val {
-						ogImage = n
-						break out
-					}
-				}
-			}
-		}
-
-		if ogImage == nil {
-			return
-		}
-
-		var relative string
-		for _, item := range ogImage.Attr {
-			if item.Key == "content" {
-				relative = item.Val
-			}
-		}
-
-		absolute := relative
-		if relative[0] == '/' {
-			absolute = toAbsolute(relative)
-		}
-		appendMetaTag(doc, []html.Attribute{
-			{Key: key, Val: val},
-			{Key: "content", Val: absolute},
-		})
-	}
-
-	fix("property", "og:image")
-	fix("name", "twitter:image")
-}
-
-func (s *Server) insertMetaTags(doc *html.Node, r *http.Request) {
-	ctx := r.Context()
-
-	absoluteURL := func(path string) string {
-		scheme := "http://"
-		if s.config.CertFile != "" {
-			scheme = "https://"
-		}
-		return scheme + filepath.Join(r.Host, path)
-	}
-
-	path := strings.TrimRight(r.URL.Path, "/")
-	list := strings.Split(path, "/")[1:]
-
-	appendTitle := func(title, ogSuffix string) {
-		setTitle(doc, title, s.config.SiteName)
-		ogTitle := title + ogSuffix
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "property", Val: "og:title"},
-			{Key: "content", Val: ogTitle},
-		})
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "name", Val: "twitter:title"},
-			{Key: "content", Val: ogTitle},
-		})
-	}
-
-	appendDescription := func(desc string) {
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "name", Val: "description"},
-			{Key: "content", Val: desc},
-		})
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "property", Val: "og:description"},
-			{Key: "content", Val: desc},
-		})
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "name", Val: "twitter:description"},
-			{Key: "content", Val: desc},
-		})
-	}
-
-	appendOGImage := func(url string) {
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "property", Val: "og:image"},
-			{Key: "content", Val: url},
-		})
-		appendMetaTag(doc, []html.Attribute{
-			{Key: "name", Val: "twitter:image"},
-			{Key: "content", Val: url},
-		})
-	}
-
-	description := s.config.SiteDescription
-	appendDescription(description)
-	// The default og:type tag is in index.html file.
-	appendMetaTag(doc, []html.Attribute{
-		{Key: "property", Val: "og:url"},
-		{Key: "content", Val: "https://" + filepath.Join(r.Host, r.URL.String())},
-	})
-	// The default og:title tag is in index.html file.
-	// The default og:image tag is in index.html file.
-	fixOgImageTag(doc, absoluteURL)
-	// The default og:site_name tag is in index.html file.
-
-	if path == "/about" {
-		text := "About " + s.config.SiteName
-		appendTitle(text, "")
-		appendDescription(text)
-	} else if path == "/terms" {
-		text := "Terms and conditions of " + s.config.SiteName
-		appendTitle(text, "")
-		appendDescription(text)
-	} else if path == "/privacy-policy" {
-		text := "Privacy policy of " + s.config.SiteName
-		appendTitle(text, "")
-		appendDescription(text)
-	} else if path == "/guidelines" {
-		text := "Guidelines on using " + s.config.SiteName
-		appendTitle(text, "")
-		appendDescription(text)
-	} else if len(list) == 1 {
-		if strings.HasPrefix(list[0], "@") {
-			// user profile page
-			username := list[0] // with @
-			user, err := core.GetUserByUsername(ctx, s.db, username[1:], nil)
-			if err == nil {
-				var username string
-				if user.IsGhost() {
-					user.UnsetToGhost()
-					username = user.Username
-					user.SetToGhost()
-				} else {
-					username = user.Username
-				}
-				appendTitle("@"+username, " on "+s.config.SiteName)
-				appendDescription(username + "'s profile.")
-			}
-		} else {
-			// community page
-			community, err := core.GetCommunityByName(ctx, s.db, list[0], nil)
-			if err == nil {
-				appendTitle(community.Name, " - "+s.config.SiteName)
-				appendDescription(community.About.String)
-				appendMetaTag(doc, []html.Attribute{
-					{Key: "name", Val: "description"},
-					{Key: "content", Val: community.About.String},
-				})
-				image := ""
-				if community.BannerImage != nil {
-					image = absoluteURL(*community.BannerImage.URL)
-				} else if community.ProPic != nil {
-					image = absoluteURL(*community.ProPic.URL)
-				}
-				if image != "" {
-					appendOGImage(image)
-				}
-			}
-		}
-	} else if len(list) == 3 && list[1] == "post" {
-		// post page
-		post, err := core.GetPost(ctx, s.db, nil, list[2], nil, true)
-		if err == nil {
-			appendTitle(post.Title, "")
-			sep := " • "
-			upVotes := strconv.Itoa(post.Upvotes) + " upvote"
-			if post.Upvotes > 1 || post.Upvotes == 0 {
-				upVotes += "s"
-			}
-			noComments := strconv.Itoa(post.NumComments) + " comment"
-			if post.NumComments > 1 || post.NumComments == 0 {
-				noComments += "s"
-			}
-			ogDescription := upVotes + sep + noComments
-			appendDescription(ogDescription)
-			appendMetaTag(doc, []html.Attribute{
-				{Key: "name", Val: "description"},
-				{Key: "content", Val: upVotes + sep + noComments + sep + post.Title},
-			})
-			image := ""
-			if post.Type == core.PostTypeImage {
-				if post.Image != nil {
-					image = absoluteURL(*post.Image.URL)
-				}
-			} else if post.Type == core.PostTypeLink {
-				if post.Link != nil && post.Link.Image != nil {
-					image = absoluteURL(*post.Link.Image.URL)
-				}
-			}
-			if image != "" {
-				appendOGImage(image)
-			}
-		}
-	}
-}
-
-// Serves React static files and serves index.html for all routes that doesn't
-// match a file.
-func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
-	// Move incoming requests with a trailing slash to a url without it.
-	if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
-		var u url.URL = *r.URL
-		u.Path = strings.TrimSuffix(u.Path, "/")
-		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
-		return
-	}
-
-	ses, err := s.sessions.Get(r)
-	if err == nil {
-		s.setInitialCookies(w, r, ses)
-	}
-
-	path, err := filepath.Abs(r.URL.Path)
-	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
-		return
-	}
-
-	serveIndexFileNotFound := func(perr error) {
-		log.Printf("Error serving index.html file: %v\n", perr)
-
-		const tmplStr = `
-			<!DOCTYPE html>
-			<html lang="en">
-			<head>
-				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<title>{{.Title}}</title>
-			</head>
-			<body>
-				<p>{{.ErrorMessage}}</p>
-			</body>
-			</html>
-		`
-
-		tmpl, err := template.New("page").Parse(tmplStr)
-		if err != nil {
-			log.Fatalf("Error parsing index.html not found template: %v\n", err)
-		}
-
-		data := struct {
-			Title        string
-			ErrorMessage string
-		}{
-			Title:        s.config.SiteName,
-			ErrorMessage: fmt.Sprintf("Error %s", perr.Error()),
-		}
-
-		w.Header().Add("Cache-Control", "no-store")
-
-		if err := tmpl.Execute(w, data); err != nil {
-			log.Printf("Error writing index.html not found template: %v\n", err)
-		}
-
-	}
-
-	skipServiceWorkerCache := func(header http.Header) {
-		header.Add("X-Service-Worker-Cache", "no-store")
-	}
-
-	serveIndexFile := func(fileNotFound bool) {
-		file, err := os.Open(filepath.Join(s.reactPath, s.reactIndex))
-		if err != nil {
-			skipServiceWorkerCache(w.Header())
-			serveIndexFileNotFound(fmt.Errorf("opening index.html file: %w", err))
-			return
-		}
-		defer file.Close()
-
-		doc, err := html.Parse(file)
-		if err != nil {
-			serveIndexFileNotFound(fmt.Errorf("parsing index.html file: %w", err))
-			return
-		}
-
-		s.insertMetaTags(doc, r)
-
-		w.Header().Add("Cache-Control", "no-store")
-		if fileNotFound {
-			skipServiceWorkerCache(w.Header())
-		}
-
-		var writer io.Writer = w
-		if httputil.AcceptEncoding(r.Header, "gzip") {
-			gz := gzip.NewWriter(w)
-			defer gz.Close()
-			writer = gz
-			w.Header().Add("Content-Encoding", "gzip")
-			w.Header().Add("Content-Type", "text/html; charset=UTF-8")
-		}
-		html.Render(writer, doc)
-	}
-
-	if path == "/" {
-		serveIndexFile(false)
-		return
-	} else if path == "/service-worker.js" {
-		w.Header().Add("Cache-Control", "private, max-age=0")
-	}
-
-	fpath := filepath.Join(s.reactPath, path)
-	_, err = os.Stat(fpath)
-	if os.IsNotExist(err) {
-		serveIndexFile(true)
-		return
-	} else if err != nil {
-		http.Error(w, "500: Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	httputil.FileServer(http.Dir(s.reactPath)).ServeHTTP(w, r)
-}
 
 // isLoggedIn returns whether user is logged in and the user's ID if so. ID is
 // nil if user is not logged in.
+
 func isLoggedIn(ses *sessions.Session) (bool, *uid.ID) {
 	sesUID, ok := ses.Values["uid"]
 	if !ok {
