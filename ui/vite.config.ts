@@ -7,20 +7,25 @@ import YAML from 'yaml';
 import { hostnameToURL } from './src/helper';
 
 const { define: yamlConfigDefine, config: yamlConfig } = parseYamlConfigFile();
-
+const devServerPort = parsePort(process.env.VITE_PORT, 15173);
 const proxyAddr = hostnameToURL(process.env.VITE_DEV_PROXY ?? yamlConfig.addr);
 
 export default defineConfig({
   plugins: [react(), viteCompression(), viteCompression({ algorithm: 'brotliCompress' })],
   server: {
+    host: '127.0.0.1',
+    port: devServerPort,
+    strictPort: true,
     proxy: {
       '/api': {
         target: proxyAddr,
         secure: false,
+        changeOrigin: true,
       },
       '/images': {
         target: proxyAddr,
         secure: false,
+        changeOrigin: true,
       },
     },
   },
@@ -86,4 +91,15 @@ function parseYamlConfigFile(): { define: { [index: string]: string }; config: A
   }
 
   return { define, config };
+}
+
+function parsePort(value: string | undefined, defaultPort: number) {
+  if (!value) {
+    return defaultPort;
+  }
+  const port = Number.parseInt(value, 10);
+  if (Number.isNaN(port)) {
+    throw new Error(`invalid port: ${value}`);
+  }
+  return port;
 }
