@@ -1,4 +1,4 @@
-FROM golang:1.23 AS backend-builder
+FROM golang:1.23 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libvips-dev && \
@@ -15,33 +15,17 @@ RUN go mod download
 COPY . .
 RUN go build -ldflags "-s -w" -o discuit .
 
-FROM node:18 AS frontend-builder
-
-RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
-
-WORKDIR /app
-COPY config.default.yaml .
-RUN mv config.default.yaml config.yaml
-COPY --from=backend-builder /app/discuit /app/discuit
-
-WORKDIR /app/ui
-COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY ui/ .
-
-FROM node:18
+FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
-RUN corepack enable && corepack prepare pnpm@10.31.0 --activate
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     redis-server \
-    libvips-dev && \
+    libvips-dev \
+    ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=frontend-builder /app/ui /app/ui
-COPY --from=backend-builder /app/discuit /app/discuit
-COPY config.default.yaml /app/config.yaml
+COPY --from=builder /app/discuit /app/discuit
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

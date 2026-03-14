@@ -7,8 +7,15 @@ Built with:
 
 - [Go](https://go.dev): The backend.
 - [React](https://react.dev/): The frontend.
-- [MariaDB](https://en.wikipedia.org/wiki/MariaDB): The main datastore.
+- [MariaDB](https://en.wikipedia.org/wiki/MariaDB) / [SQLite](https://www.sqlite.org/): The main datastore.
 - [Redis](https://redis.io/): For transient data.
+
+## Architecture
+
+The project deploys as two separate parts:
+
+- **Backend**: A Go API server running in a Docker container, serving `/api/` and `/images/` routes.
+- **Frontend**: A React SPA built with Vite, deployed to a CDN.
 
 ## Getting started
 
@@ -18,35 +25,18 @@ To setup a development environment of Discuit on your local computer:
 
 1.  Install Go (1.21 or higher) by following the instructions at
     [go.dev.](https://go.dev/doc/install)
-1.  Install MariaDB (11.3 or higher), Redis, Node.js (and NPM). On Ubuntu, for
-    instance, you might have to run the following commands:
+1.  Install Redis, Node.js, and pnpm. On Ubuntu, for instance:
 
     ```shell
     sudo apt update
-
-    # Install and start MariaDB
-    sudo apt install mariadb-server
-    sudo systemctl start mariadb.service
 
     # Install and start Redis
     sudo apt install redis-server
     sudo systemctl start redis.service
 
-    # Install Node.js and NPM
-    sudo apt install nodejs npm
-    ```
-
-1.  Create a MariaDB database.
-
-    ```shell
-    # Open MariaDB CLI
-    mariadb -u root -p --binary-as-hex
-
-    # Create a database named discuit (you may use a different name)
-    create database discuit;
-
-    # Enter exit (or press Ctrl+D) to exit
-    exit;
+    # Install Node.js and pnpm
+    sudo apt install nodejs
+    npm install -g pnpm
     ```
 
 1.  Discuit uses `libvips` for fast image transformations. Make sure it's
@@ -58,82 +48,87 @@ To setup a development environment of Discuit on your local computer:
     git clone https://github.com/discuitnet/discuit.git && cd discuit
     ```
 
-1.  Create a file named `config.yaml` in the root directory and copy the contents
-    of `config.default.yaml` into it. And enter the required config parameters in
-    `config.yaml`.
-1.  Build the frontend and the backend:
+1.  Start a local Redis container (or use a system Redis):
 
     ```shell
-    ./build.sh
+    make prepare-dev
     ```
 
-1.  Run migrations:
+1.  Run the dev server (starts both backend and frontend):
 
     ```shell
-    ./discuit migrate run
-    ```
-
-1.  Start the server:
-
-    ```shell
-    ./discuit serve
+    make dev
     ```
 
 After creating an account, you can run `./discuit admin make username` to make
 a user an admin of the site.
 
-Note: Do not install the discuit binary using `go install` or move it somewhere else. It uses files in this repository at runtime and so it should only be run from the root of this repository.
-
-### Running with Docker
+### Running with Docker (Backend only)
 
 1. **Build the Docker Image**
 
-   > **Note**: If you need to run discuit on a different architecture, simply change the Dockerfile in the `-f` flag to the appropriate Dockerfile for your architecture, currently we support `linux/amd64` (docker/Dockerfile.amd64), and `linux/arm64` (docker/Dockerfile.arm64).
-
    ```shell
-   docker build -t discuit -f docker/Dockerfile.amd64 .
+   docker build -t discuit .
    ```
 
 2. **Run the Docker Container**
 
-   > **Note**: The following command while having a persistent database, the included config.yaml file is not. You will need to mount the file to the container if you want to persist the configuration.
-
    ```shell
-   docker run -d --name discuit -v discuit-db:/var/lib/mysql -v discuit-redis:/var/lib/redis -v discuit-images:/app/images -p 8080:80 discuit
+   docker run -d --name discuit \
+     -v discuit-data:/app/data \
+     -v discuit-redis:/var/lib/redis \
+     -v discuit-images:/app/images \
+     -e DISCUIT_ADDR=":80" \
+     -e DISCUIT_DB_DRIVER="sqlite3" \
+     -e DISCUIT_DB_DSN="/app/data/discuit.db" \
+     -p 8080:80 \
+     discuit
    ```
 
-3. **Accessing Discuit**: After the container starts, you can access Discuit by navigating to `http://localhost:8080` on your web browser, or to the specific port if you customized the port mapping.
-
-4. **Stopping the Container**: When you're done, you can stop the container by running:
+3. **Stopping and Starting**:
 
    ```shell
    docker stop discuit
-   ```
-
-5. **Starting the Container Again**: To start the container again, use:
-
-   ```shell
    docker start discuit
    ```
 
-### Running with Nix Flakes
+## Environment Variables
 
-If you use [Nix](https://nixos.org/) or [NixOS](https://nixos.org/), you can get a fully reproducible dev environment with all dependencies using the included flake:
+All configuration can be set via environment variables. If a `config.yaml` file exists in the working directory, it will be loaded first, then environment variables override any values set in YAML.
 
-```sh
-nix develop
-```
-
-This will:
-
-- Install all required packages.
-- Start local MariaDB and Redis servers (with logs in `.mysql/` and `.redis/` respectively).
-- Create the `discuit` database and user automatically.
-
-When you exit the shell, MariaDB and Redis will automatically stop.
-
-> [!IMPORTANT]
-> You'll need [Nix flakes enabled](https://nixos.wiki/wiki/Flakes) and a recent version of Nix to use this.
+| Variable | Description | Default |
+|---|---|---|
+| `DISCUIT_ADDR` | Server listen address (host:port) | `:8080` |
+| `DISCUIT_IS_DEVELOPMENT` | Enable development mode | `false` |
+| `DISCUIT_USE_HTTP_COOKIES` | Use HTTP (insecure) cookies | `false` |
+| `DISCUIT_SITE_NAME` | Site display name | `""` |
+| `DISCUIT_SITE_DESCRIPTION` | Site description for meta tags | `""` |
+| `DISCUIT_DB_DRIVER` | Database driver (`sqlite3`, `mariadb`, `postgres`) | `sqlite3` |
+| `DISCUIT_DB_DSN` | Database DSN | `discuit.db` |
+| `DISCUIT_DB_ADDR` | MariaDB address | `""` |
+| `DISCUIT_DB_USER` | MariaDB user | `discuit` |
+| `DISCUIT_DB_PASSWORD` | MariaDB password | `""` |
+| `DISCUIT_DB_NAME` | MariaDB database name | `""` |
+| `DISCUIT_SESSION_COOKIE_NAME` | Session cookie name | `SID` |
+| `DISCUIT_REDIS_ADDRESS` | Redis address | `:6379` |
+| `DISCUIT_HMAC_SECRET` | HMAC secret for signing | `""` |
+| `DISCUIT_CSRF_OFF` | Disable CSRF protection | `false` |
+| `DISCUIT_NO_LOG_TO_FILE` | Disable file logging | `false` |
+| `DISCUIT_PAGINATION_LIMIT` | Default pagination limit | `10` |
+| `DISCUIT_PAGINATION_LIMIT_MAX` | Max pagination limit | `50` |
+| `DISCUIT_DEFAULT_FEED_SORT` | Default feed sort order | `hot` |
+| `DISCUIT_CAPTCHA_SECRET` | Captcha secret (skipped if empty) | `""` |
+| `DISCUIT_CAPTCHA_SITEKEY` | Captcha site key | `""` |
+| `DISCUIT_CERT_FILE` | TLS certificate file path | `""` |
+| `DISCUIT_KEY_FILE` | TLS key file path | `""` |
+| `DISCUIT_DISABLE_RATE_LIMITS` | Disable rate limiting | `false` |
+| `DISCUIT_MAX_IMAGE_SIZE` | Max image size in bytes | `26214400` |
+| `DISCUIT_ADMIN_API_KEY` | Admin API key (disables rate limits) | `""` |
+| `DISCUIT_DISABLE_IMAGE_POSTS` | Disable image posts | `false` |
+| `DISCUIT_DISABLE_FORUM_CREATION` | Only admins can create communities | `false` |
+| `DISCUIT_FORUM_CREATION_REQ_POINTS` | Points required to create a community | **required** |
+| `DISCUIT_MAX_FORUMS_PER_USER` | Max communities per user | **required** |
+| `DISCUIT_IMAGES_FOLDER_PATH` | Path for image storage | `images` |
 
 ### Source code layout
 
@@ -145,45 +140,6 @@ In the root directory are these directories:
 - `migrations`: Contains the SQL migration files.
 - `server`: Contains the REST API backend.
 - `ui` - Contains the React frontend.
-
-## Roadmap
-
-- [x] Dark mode.
-- [x] User created communities.
-- UI preferences:
-  - [x] Compact mode.
-  - [x] Enable or disable infinite scroll.
-  - [x] Choose which notifications to get.
-  - [x] Change default feed sort.
-- Filtering:
-  - [x] Mute communities.
-  - [x] Mute users.
-  - [ ] Filter posts by topic.
-  - [ ] An explore page (modeled after Youtube's home page).
-  - [ ] Filter link-posts by URL or domain.
-- Moderation:
-  - [x] Pinned posts and comments.
-  - [ ] Lock individual comments (so they cannot be replied to).
-  - [ ] A single page for handling reports for users who moderate multiple communities.
-  - [ ] Temporary bans.
-- [ ] User and community mentions (@user and +community).
-- [x] Image posts.
-- [ ] Poll posts.
-- [x] Video embeds (Youtube, Vimeo, etc).
-- [x] Image galleries.
-- [ ] Server side rendering (for better SEO).
-- [ ] Direct messages.
-- [x] Saved posts and comments (modeled after Youtube playlists).
-- [ ] Multiple feeds (modeled after Twitter Lists).
-- [ ] Search.
-- [ ] Moderation log.
-- [ ] RSS feeds.
-- [ ] Wiki pages for communities.
-- [x] User profile pictures.
-- [x] User badges (displayed on profile page).
-- [ ] Post drafts.
-- [ ] History (viewed posts).
-- [ ] Something like Reddit's flairs to group posts within a community.
 
 ## Contributing
 

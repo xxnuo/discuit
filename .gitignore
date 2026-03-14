@@ -11,8 +11,4 @@ node_modules
 /discuit
 /images
 .secrets
-
-.mysql
-.redis
-dump.rdb
 *.db

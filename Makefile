@@ -3,8 +3,6 @@ SHELL := /bin/bash
 UI_DIR := ui
 UI_DEPS_STAMP := $(UI_DIR)/node_modules/.installed
 BINARY := discuit
-CONFIG_FILE := config.yaml
-CONFIG_DEFAULT_FILE := config.default.yaml
 PORTS_FILE := .dev-ports.mk
 UI_CONFIG_FILE := $(UI_DIR)/pnpm-workspace.yaml
 UI_INSTALL := pnpm install --frozen-lockfile
@@ -18,9 +16,9 @@ FRONTEND_PORT_SEED := 45173
 IMAGE_NAME ?= discuit
 IMAGE_TAG ?= latest
 
-.PHONY: dev dev-ui dev-server build build-ui build-server ensure-config ensure-ports migrate prepare-dev docker docker-up docker-down
+.PHONY: dev dev-ui dev-server build build-ui build-server ensure-ports migrate prepare-dev docker
 
-dev: ensure-config ensure-ports migrate $(UI_DEPS_STAMP)
+dev: ensure-ports migrate $(UI_DEPS_STAMP)
 	backend_port='$(BACKEND_PORT)'; \
 	frontend_port='$(FRONTEND_PORT)'; \
 	if [ -z "$$backend_port" ] || [ -z "$$frontend_port" ]; then \
@@ -33,7 +31,7 @@ dev: ensure-config ensure-ports migrate $(UI_DEPS_STAMP)
 	(cd $(UI_DIR) && DISCUIT_ADDR=:$$backend_port VITE_PORT=$$frontend_port VITE_DEV_PROXY=http://127.0.0.1:$$backend_port $(UI_RUN) dev) & \
 	wait
 
-dev-ui: ensure-config ensure-ports $(UI_DEPS_STAMP)
+dev-ui: ensure-ports $(UI_DEPS_STAMP)
 	backend_port='$(BACKEND_PORT)'; \
 	frontend_port='$(FRONTEND_PORT)'; \
 	if [ -z "$$backend_port" ] || [ -z "$$frontend_port" ]; then \
@@ -43,7 +41,7 @@ dev-ui: ensure-config ensure-ports $(UI_DEPS_STAMP)
 	fi; \
 	cd $(UI_DIR) && DISCUIT_ADDR=:$$backend_port VITE_PORT=$$frontend_port VITE_DEV_PROXY=http://127.0.0.1:$$backend_port $(UI_RUN) dev
 
-dev-server: ensure-config ensure-ports migrate
+dev-server: ensure-ports migrate
 	backend_port='$(BACKEND_PORT)'; \
 	if [ -z "$$backend_port" ]; then \
 		. $(PORTS_FILE); \
@@ -56,11 +54,8 @@ build: build-server build-ui
 build-server:
 	go build -o $(BINARY) .
 
-build-ui: ensure-config $(UI_DEPS_STAMP)
+build-ui: $(UI_DEPS_STAMP)
 	cd $(UI_DIR) && $(UI_RUN) build
-
-ensure-config:
-	@if [ ! -f $(CONFIG_FILE) ]; then cp $(CONFIG_DEFAULT_FILE) $(CONFIG_FILE); fi
 
 ensure-ports:
 	@if [ ! -f $(PORTS_FILE) ]; then \
@@ -71,7 +66,7 @@ ensure-ports:
 		printf 'BACKEND_PORT=%s\nFRONTEND_PORT=%s\n' "$$backend" "$$frontend" > $(PORTS_FILE); \
 	fi
 
-migrate: ensure-config
+migrate:
 	go run . migrate run
 
 $(UI_DEPS_STAMP): $(UI_DIR)/package.json $(UI_LOCKFILE) $(UI_CONFIG_FILE)
@@ -91,9 +86,3 @@ prepare-dev:
 
 docker:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
-
-docker-up:
-	docker compose up -d
-
-docker-down:
-	docker compose down
