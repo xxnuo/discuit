@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import Link from '../../components/Link';
 import Pagination from '../../components/Pagination';
@@ -12,6 +13,7 @@ import ReportsView from './ReportsView';
 
 const Reports = ({ community }: { community: Community }) => {
   const dispatch = useDispatch();
+  const { t } = useTranslation('modtools');
 
   const [page, setPage] = usePagination();
   const limit = 10;
@@ -41,7 +43,7 @@ const Reports = ({ community }: { community: Community }) => {
         method: 'DELETE',
       });
       setReports((reports) => reports.filter((r) => r.id !== report.id));
-      dispatch(snackAlert('Report ignored.'));
+      dispatch(snackAlert(t('reportIgnored')));
     } catch (error) {
       dispatch(snackAlertError(error));
     }
@@ -60,7 +62,7 @@ const Reports = ({ community }: { community: Community }) => {
   return (
     <ReportsView
       className="is-reports-page"
-      title="Reports"
+      title={t('reports')}
       noPosts={details.noPostReports}
       noComments={details.noCommentReports}
       filter={filter}
@@ -93,15 +95,15 @@ const Reports = ({ community }: { community: Community }) => {
             return (
               <div key={report.id} className="card card-padding card-report">
                 <div className="card-report-head">
-                  <div className="left">Reason: {report.reason}.</div>
+                  <div className="left">{t('reason', { reason: report.reason })}</div>
                   <div className="right">{timeAgo(report.createdAt)}</div>
                 </div>
-                {removed && <div className="card-report-removed">Removed by {removedUser}.</div>}
+                {removed && <div className="card-report-removed">{t('removedByUser', { user: removedUser })}</div>}
                 <div className="card-report-item">{item}</div>
                 <div className="card-report-buttons">
-                  <button onClick={() => handleIgnore(report)}>Ignore</button>
+                  <button onClick={() => handleIgnore(report)}>{t('ignore')}</button>
                   <Link className="button button-red" to={handleURL}>
-                    Handle
+                    {t('handle')}
                   </Link>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { useHistory } from 'react-router';
 import { useLocation } from 'react-router-dom';
@@ -24,6 +25,7 @@ import SelectCommunity from './SelectCommunity';
 
 const NewPost = () => {
   const dispatch = useDispatch();
+  const { t } = useTranslation(['common', 'post']);
   const history = useHistory();
   const location = useLocation();
 
@@ -95,7 +97,7 @@ const NewPost = () => {
           if (post.type === 'image') {
             SetImages(post.images);
           } else if (post.type === 'link') {
-            setLink(post.deletedContent ? 'Deleted link' : post.link.url);
+            setLink(post.deletedContent ? t('post:deletedLink') : post.link.url);
           }
           setPostType(post.type);
           setLoading('loaded');
@@ -116,9 +118,7 @@ const NewPost = () => {
     }
     // Check to see if uploading these images would reach the max image limit.
     if (images.length + files.length > maxNumOfImages) {
-      alert(
-        `Image posts cannot contain more than ${maxNumOfImages} images. Please select fewer images and continue.`
-      );
+      alert(t('post:maxImagesExceeded', { max: maxNumOfImages }));
       return;
     }
     setIsUploading(true);
@@ -136,14 +136,12 @@ const NewPost = () => {
           if (res.status === 400) {
             const error = await res.json();
             if (error.code === 'file_size_exceeded') {
-              dispatch(snackAlert('Maximum file size exceeded.'));
+              dispatch(snackAlert(t('error.fileSizeExceeded')));
               break;
             } else if (error.code === 'unsupported-image-format') {
               console.log(file.name);
               dispatch(
-                snackAlert(
-                  `File '${truncateStringWithDots(file.name, 20)}' is of an unsupported type.`
-                )
+                snackAlert(t('error.unsupportedFileType', { name: truncateStringWithDots(file.name, 20) }))
               );
               break;
             }
@@ -201,9 +199,9 @@ const NewPost = () => {
 
   const getPostingDisabledText = () => {
     if (isBanned) {
-      return `You've been banned from ${community?.name}.`;
+      return t('post:bannedFromCommunity', { name: community?.name });
     } else {
-      return `Only approved members of this community can post.`;
+      return t('post:onlyApprovedMembers');
     }
   };
 
@@ -217,38 +215,36 @@ const NewPost = () => {
   const handleSubmit = async () => {
     if (isSubmitDisabled) return;
     if (isBanned) {
-      alert('You are banned from community');
+      alert(t('post:bannedFromCommunity', { name: community?.name }));
       return;
     }
     if (community === null) {
-      alert('Select a community first');
+      alert(t('post:selectCommunityFirst'));
       return;
     }
     if (title.length < 3) {
       if (title.length === 0) {
-        alert('Your post needs a title');
+        alert(t('post:needsTitle'));
         return;
       }
-      alert('Title is too short');
+      alert(t('post:titleTooShort'));
       return;
     }
     if (postType === 'image') {
       if (images.length === 0) {
-        alert("You haven't uploaded an image");
+        alert(t('post:noImageUploaded'));
         return;
       }
       if (user.requireAltText) {
         if (isAltMissing()) {
-          alert(
-            "One or more images are missing alt text. Please make sure that you've added alt text to all images."
-          );
+          alert(t('post:altTextMissing'));
           return;
         }
       }
     }
     if (postType === 'link') {
       if (link === '') {
-        alert('Please submit a valid URL');
+        alert(t('post:submitValidUrl'));
         return;
       }
     }
@@ -296,7 +292,7 @@ const NewPost = () => {
           if (res.status === 400) {
             const error = await res.json();
             if (error.code === 'invalid-url') {
-              dispatch(snackAlert('The URL you provided is not a valid URL.'));
+              dispatch(snackAlert(t('error.invalidUrl')));
               return;
             }
           }
@@ -322,7 +318,7 @@ const NewPost = () => {
     return () => window.removeEventListener('keydown', listner);
   }, [handleSubmit]);
   const handleCancel = () => {
-    if (((changed || isUploading) && confirm('Are you sure you want to leave?')) || !changed) {
+    if (((changed || isUploading) && confirm(t('post:confirmLeave'))) || !changed) {
       if (isUploading) abortController.current.abort();
       const historyLength = getGlobalAppData().historyLength || 0;
       if (historyLength > 1) {
@@ -419,7 +415,7 @@ const NewPost = () => {
   return (
     <div className="page-content page-new">
       <Helmet>
-        <title>{isEditPost ? 'Edit Post' : 'New Post'}</title>
+        <title>{isEditPost ? t('post:editPost') : t('post:newPost')}</title>
       </Helmet>
       <div className="page-new-content">
         <div className="page-new-content-post">
@@ -458,7 +454,7 @@ const NewPost = () => {
                   <path d="M0 0h24v24H0z" fill="none" />
                   <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z" />
                 </svg>
-                <span>Text</span>
+                <span>{t('post:text')}</span>
               </button>
               {!isImagePostsDisabled && (
                 <button
@@ -480,7 +476,7 @@ const NewPost = () => {
                     <path d="M0 0h24v24H0V0z" fill="none" />
                     <path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z" />
                   </svg>
-                  <span>Image</span>
+                  <span>{t('common:image')}</span>
                 </button>
               )}
               <button
@@ -502,12 +498,12 @@ const NewPost = () => {
                   <path d="M0 0h24v24H0V0z" fill="none" />
                   <path d="M17 7h-4v2h4c1.65 0 3 1.35 3 3s-1.35 3-3 3h-4v2h4c2.76 0 5-2.24 5-5s-2.24-5-5-5zm-6 8H7c-1.65 0-3-1.35-3-3s1.35-3 3-3h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-2zm-3-4h8v2H8z" />
                 </svg>
-                <span>Link</span>
+                <span>{t('post:link')}</span>
               </button>
             </div>
             <Textarea
               className="page-new-post-title"
-              placeholder="Post title goes here..."
+              placeholder={t('post:titlePlaceholder')}
               value={title}
               onChange={handleTitleChange}
               rows={1}
@@ -517,7 +513,7 @@ const NewPost = () => {
             {postType === 'text' && (
               <MarkdownTextarea
                 className="page-new-post-body"
-                placeholder="Post content goes here (optional)..."
+                placeholder={t('post:bodyPlaceholder')}
                 value={body}
                 onChange={handleBodyChange}
                 onPaste={handleBodyPaste}
@@ -568,8 +564,8 @@ const NewPost = () => {
                     disabled={!imageSubmitAllowed || images.length >= maxNumOfImages}
                     disabledMessage={
                       !imageSubmitAllowed
-                        ? "You don't have enough points to submit images yet."
-                        : 'Maximum number of images reached.'
+                        ? t('post:notEnoughPointsImage')
+                        : t('post:maxImagesReached')
                     }
                   />
                 )}
@@ -585,7 +581,7 @@ const NewPost = () => {
                       <path d="M0 0h24v24H0V0z" fill="none" />
                       <path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z" />
                     </svg>
-                    <p>Deleted image</p>
+                    <p>{t('post:deletedImage')}</p>
                   </div>
                 )}
               </div>
@@ -595,8 +591,8 @@ const NewPost = () => {
                 className="page-new-post-body"
                 placeholder={
                   !linkSubmitAllowed
-                    ? "You don't have enough points to submit link posts yet."
-                    : 'Paste URL here...'
+                    ? t('post:notEnoughPointsLink')
+                    : t('post:linkPlaceholder')
                 }
                 value={link}
                 onChange={handleLinkChange}
@@ -612,17 +608,17 @@ const NewPost = () => {
             </div>
           )}
           <div className="new-page-help">
-            {'Use '}
+            {t('post:useMarkdown')}
             <Link to="/markdown_guide" target="_blank">
-              Markdown
+              {t('post:markdownLink')}
             </Link>
-            {' to format posts.'}
+            {t('post:toFormatPosts')}
           </div>
           <div className="page-new-buttons is-no-m">
             <button className="button-main" onClick={handleSubmit} disabled={isSubmitDisabled}>
-              Submit
+              {t('common:submit')}
             </button>
-            <button onClick={handleCancel}>Cancel</button>
+            <button onClick={handleCancel}>{t('common:cancel')}</button>
           </div>
         </div>
         <div className="new-page-sidebar">
@@ -635,9 +631,9 @@ const NewPost = () => {
         </div>
         <div className="page-new-buttons is-m">
           <button className="button-main" onClick={handleSubmit} disabled={isSubmitDisabled}>
-            Submit
+            {t('common:submit')}
           </button>
-          <button onClick={handleCancel}>Cancel</button>
+          <button onClick={handleCancel}>{t('common:cancel')}</button>
         </div>
       </div>
     </div>
@@ -657,6 +653,7 @@ const ImageUploadArea = ({
   disabled?: boolean;
   disabledMessage?: string;
 }) => {
+  const { t } = useTranslation('post');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const dropzoneRef = useRef(null);
   const handleOnDrop: React.DragEventHandler = (event) => {
@@ -732,14 +729,14 @@ const ImageUploadArea = ({
               onChange={handleFileChange}
               disabled={disabled}
             />
-            <div>Add photo</div>
-            <div className="is-small">Or drag and drop</div>
+            <div>{t('post:addPhoto')}</div>
+            <div className="is-small">{t('post:orDragAndDrop')}</div>
           </>
         )}
         {disabled && <div>{disabledMessage}</div>}
         {isUploading && (
           <div className="flex flex-center page-new-image-uploading">
-            <div className="page-new-uploading-text">Uploading image</div>
+            <div className="page-new-uploading-text">{t('post:uploadingImage')}</div>
             <Spinner style={{ marginLeft: 5 }} size={25} />
           </div>
         )}

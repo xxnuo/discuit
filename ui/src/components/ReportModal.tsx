@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { APIError, mfetch } from '../helper';
 import { MainState, snackAlert, snackAlertError } from '../slices/mainSlice';
@@ -25,6 +26,7 @@ const ReportModal = ({
   open: outerOpen,
   onClose,
 }: ReportModalProps) => {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const reasons = useSelector<RootState>(
     (state) => state.main.reportReasons
@@ -82,13 +84,13 @@ const ReportModal = ({
     <>
       {noButton ? null : (
         <button className={buttonClassName} onClick={() => setInnerOpen(true)} disabled={disabled}>
-          Report
+          {t('report')}
         </button>
       )}
       <Modal open={open} onClose={handleClose}>
         <div className="modal-card">
           <div className="modal-card-head">
-            <div className="modal-card-title">Report {targetType}</div>
+            <div className="modal-card-title">{t('reportModal.reportTarget', { type: targetType })}</div>
             <ButtonClose onClick={handleClose} />
           </div>
           <div className="modal-card-content">
@@ -112,9 +114,9 @@ const ReportModal = ({
           </div>
           <div className="modal-card-actions">
             <button className="button-main" onClick={handleReport} disabled={selected === null}>
-              Report
+              {t('report')}
             </button>
-            <button onClick={handleClose}>Cancel</button>
+            <button onClick={handleClose}>{t('cancel')}</button>
           </div>
         </div>
       </Modal>

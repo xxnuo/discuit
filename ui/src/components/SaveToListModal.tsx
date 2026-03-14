@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { mfetchjson } from '../helper';
 import { EditListForm } from '../pages/Lists/List';
@@ -38,6 +39,7 @@ interface TheModalProps {
 }
 
 const TheModal = ({ open, onClose, toSaveItemId, toSaveItemType }: TheModalProps) => {
+  const { t } = useTranslation();
   const handleClose = onClose;
 
   const dispatch = useDispatch();
@@ -117,7 +119,7 @@ const TheModal = ({ open, onClose, toSaveItemId, toSaveItemType }: TheModalProps
           targetType: toSaveItemType,
         }),
       });
-      const alertText = checked ? `Saved to ${list.name}` : `Removed from ${list.name}`;
+      const alertText = checked ? t('saveToList.savedTo', { name: list.name }) : t('saveToList.removedFrom', { name: list.name });
       dispatch(
         snackAlert(alertText, `${checked ? 'add' : 'remove'}_listitem_${list.name}_${toSaveItemId}`)
       );
@@ -174,7 +176,7 @@ const TheModal = ({ open, onClose, toSaveItemId, toSaveItemType }: TheModalProps
           <div className="save-modal-list is-custom-scrollbar is-v2">{renderList()}</div>
         </div>
         <div className="modal-card-actions">
-          <button onClick={() => setPage('new')}>Create new list</button>
+          <button onClick={() => setPage('new')}>{t('saveToList.createNewList')}</button>
         </div>
       </>
     );
@@ -196,8 +198,8 @@ const TheModal = ({ open, onClose, toSaveItemId, toSaveItemType }: TheModalProps
       >
         <div className="modal-card-head">
           <div className="modal-card-title">
-            {page === 'list' && 'Save to'}
-            {page === 'new' && 'Create list'}
+            {page === 'list' && t('saveToList.saveTo')}
+            {page === 'new' && t('saveToList.createList')}
           </div>
           <ButtonClose onClick={handleClose} />
         </div>

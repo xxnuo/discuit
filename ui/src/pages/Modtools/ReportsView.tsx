@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import DashboardPage from '../../components/Dashboard/DashboardPage';
 import Dropdown from '../../components/Dropdown';
 
@@ -22,19 +23,20 @@ const ReportsView = ({
   setFilter,
   children,
 }: ReportsViewProps) => {
+  const { t } = useTranslation('modtools');
   const noAll = typeof noPosts === 'number' ? noPosts + noComments : null;
   const filterButtons = [
     {
       filter: 'all',
-      text: `Posts & comments` + (noAll == null ? '' : ` (${noAll})`),
+      text: t('postsAndComments') + (noAll == null ? '' : ` (${noAll})`),
     },
     {
       filter: 'posts',
-      text: `Posts` + (noAll == null ? '' : ` (${noPosts})`),
+      text: t('common:posts') + (noAll == null ? '' : ` (${noPosts})`),
     },
     {
       filter: 'comments',
-      text: `Comments` + (noAll == null ? '' : ` (${noComments})`),
+      text: t('common:comments') + (noAll == null ? '' : ` (${noComments})`),
     },
   ];
 

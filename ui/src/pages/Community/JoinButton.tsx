@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { mfetchjson } from '../../helper';
 import { Community } from '../../serverTypes';
@@ -15,6 +16,7 @@ const JoinButton = ({ className, community, ...rest }: JoinButtonProps) => {
   const loggedIn =
     (useSelector<RootState>((state) => state.main.user) as MainState['user']) !== null;
   const dispatch = useDispatch();
+  const { t } = useTranslation('community');
 
   const joined = community ? community.userJoined : false;
   const handleFollow = async () => {
@@ -22,7 +24,7 @@ const JoinButton = ({ className, community, ...rest }: JoinButtonProps) => {
       dispatch(loginPromptToggled());
       return;
     }
-    const message = `You will no longer be a moderator of '${community.name}' if you leave the community. Are you sure you want to leave?`;
+    const message = t('leaveModConfirm', { name: community.name });
     if (community.userMod && !confirm(message)) {
       return;
     }
@@ -39,7 +41,7 @@ const JoinButton = ({ className, community, ...rest }: JoinButtonProps) => {
 
   return (
     <button onClick={handleFollow} className={clsx(!joined && 'button-main', className)} {...rest}>
-      {joined ? 'Joined' : 'Join'}
+      {joined ? t('joined') : t('join')}
     </button>
   );
 };

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
 import { useDispatch, useSelector } from 'react-redux';
 import { Redirect, Route, Switch, useHistory, useLocation } from 'react-router-dom';
@@ -61,6 +62,7 @@ const tabletBreakpoint = 1170;
 getGlobalAppData().historyLength = 0;
 
 const App = () => {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
 
   // Note that window.navigator.onLine cannot always be trusted. It's false
@@ -111,7 +113,7 @@ const App = () => {
         dispatch(initialFieldsSet(initial));
       } catch (err) {
         console.error(err);
-        dispatch(snackAlert('Something went wrong.'));
+        dispatch(snackAlert(t('somethingWentWrong')));
       }
       setLoading('loaded');
     })();
@@ -249,7 +251,7 @@ const App = () => {
       >
         <div className="modal-card modal-form modal-login">
           <div className="modal-card-head">
-            <div className="modal-card-title">Login</div>
+            <div className="modal-card-title">{t('login')}</div>
             <ButtonClose onClick={() => dispatch(loginModalOpened(false))} />
           </div>
           <LoginForm isModal />

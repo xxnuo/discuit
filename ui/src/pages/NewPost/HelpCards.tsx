@@ -1,24 +1,29 @@
+import { useTranslation } from 'react-i18next';
+
 export const HelpCardCommunity = () => {
+  const { t } = useTranslation('post');
   return (
     <div className="newpost-help card-gray">
-      <div className="newpost-help-title">Select a community</div>
-      <p>Which community do you want to submit your post to?</p>
+      <div className="newpost-help-title">{t('selectCommunity')}</div>
+      <p>{t('helpSelectCommunity')}</p>
     </div>
   );
 };
 
 export const HelpCardBody = () => {
+  const { t } = useTranslation('post');
   return (
     <div className="newpost-help card-gray">
-      <p>Write content in markdown.</p>
+      <p>{t('helpMarkdown')}</p>
     </div>
   );
 };
 
 export const HelpCardTitle = () => {
+  const { t } = useTranslation('post');
   return (
     <div className="newpost-help card-gray">
-      <p>No more than 255 chars.</p>
+      <p>{t('helpTitleLimit')}</p>
     </div>
   );
 };

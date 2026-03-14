@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import Image, { ImageProps } from '../../components/Image';
 import { selectImageCopyURL } from '../../helper';
 import { Community } from '../../serverTypes';
@@ -10,8 +11,9 @@ export interface BannerProps extends ImageProps {
 }
 
 const Banner = ({ community, className, editable, ...rest }: BannerProps) => {
+  const { t } = useTranslation('community');
   let src = '';
-  let alt = `${community.name}'s banner`;
+  let alt = t('bannerAlt', { name: community.name });
 
   if (community.bannerImage) {
     src = selectImageCopyURL('small', community.bannerImage);

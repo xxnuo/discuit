@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import MarkdownBody from '../../components/MarkdownBody';
 import { CommunityRule } from '../../serverTypes';
 
@@ -40,6 +41,7 @@ RulesItems.propTypes = {
 };
 
 const Rules = ({ rules, unordered = false }: { rules: CommunityRule[]; unordered?: boolean }) => {
+  const { t } = useTranslation('community');
   if (!rules) {
     return null;
   }
@@ -47,7 +49,7 @@ const Rules = ({ rules, unordered = false }: { rules: CommunityRule[]; unordered
   return (
     <div className="card card-sub card-rules">
       <div className="card-head">
-        <div className="card-title">Community rules</div>
+        <div className="card-title">{t('communityRules')}</div>
       </div>
       <div className="card-content">
         <div className="card-rules-rules">
