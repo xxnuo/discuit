@@ -16,6 +16,7 @@ import (
 	"github.com/discuitnet/discuit/config"
 	"github.com/discuitnet/discuit/core"
 	dbx "github.com/discuitnet/discuit/internal/db"
+	"github.com/discuitnet/discuit/internal/httperr"
 	"github.com/discuitnet/discuit/internal/images"
 	"github.com/discuitnet/discuit/internal/taskrunner"
 	"github.com/discuitnet/discuit/internal/uid"
@@ -162,7 +163,7 @@ func (pg *Program) Serve() error {
 	}
 
 	if pg.conf.IsDevelopment {
-		if err := pg.createDevAdminUser(); err != nil {
+		if _, err := pg.createDevAdminUser(); err != nil {
 			log.Printf("Error creating dev admin user: %v\n", err)
 		}
 	}
@@ -456,15 +457,7 @@ func (pg *Program) ChangeUserPassword(user, password string) error {
 		return fmt.Errorf("cannot change deleted user's password")
 	}
 
-	pass, err := core.HashPassword([]byte(password))
-	if err != nil {
-		return err
-	}
-	if err = pg.db.WithContext(pg.ctx).
-		Model(&dbx.User{}).
-		Where("id = ?", theuser.ID).
-		Update("password", string(pass)).
-		Error; err != nil {
+	if err = pg.setUserPassword(theuser.ID, password); err != nil {
 		return err
 	}
 
@@ -566,39 +559,55 @@ func (pg *Program) AddAllUsersToCommunity(community string) error {
 	return nil
 }
 
-func (pg *Program) createDevAdminUser() error {
+func (pg *Program) setUserPassword(userID uid.ID, password string) error {
+	pass, err := core.HashPassword([]byte(password))
+	if err != nil {
+		return err
+	}
+	return pg.db.WithContext(pg.ctx).
+		Model(&dbx.User{}).
+		Where("id = ?", userID).
+		Update("password", string(pass)).
+		Error
+}
+
+func (pg *Program) createDevAdminUser() (*core.User, error) {
 	const username = "test"
 	const password = "test"
 
-	_, err := core.GetUserByUsername(pg.ctx, pg.db, username, nil)
-	if err == nil {
-		return nil
-	}
-
-	user, err := core.RegisterUser(pg.ctx, pg.db, username, "", password, "")
+	user, err := core.GetUserByUsername(pg.ctx, pg.db, username, nil)
 	if err != nil {
-		return fmt.Errorf("failed to register dev admin user: %w", err)
+		if !httperr.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get dev admin user: %w", err)
+		}
+		user, err = core.RegisterUser(pg.ctx, pg.db, username, "", password, "")
+		if err != nil {
+			return nil, fmt.Errorf("failed to register dev admin user: %w", err)
+		}
+		log.Printf("Dev admin user '%s' created (password: '%s')\n", username, password)
 	}
-
-	if _, err := core.MakeAdmin(pg.ctx, pg.db, user.Username, true); err != nil {
-		return fmt.Errorf("failed to make dev admin user: %w", err)
+	if user.Deleted {
+		return nil, fmt.Errorf("dev admin user is deleted")
 	}
-
-	log.Printf("Dev admin user '%s' created (password: '%s')\n", username, password)
-	return nil
+	if err := pg.setUserPassword(user.ID, password); err != nil {
+		return nil, fmt.Errorf("failed to set dev admin user password: %w", err)
+	}
+	if !user.Admin {
+		if _, err := core.MakeAdmin(pg.ctx, pg.db, user.Username, true); err != nil {
+			return nil, fmt.Errorf("failed to make dev admin user: %w", err)
+		}
+		user.Admin = true
+	}
+	return user, nil
 }
 
 func (pg *Program) Seed() error {
 	if err := pg.createSentinelUsers(); err != nil {
 		return fmt.Errorf("error creating sentinel users: %w", err)
 	}
-	if err := pg.createDevAdminUser(); err != nil {
-		return err
-	}
-
-	adminUser, err := core.GetUserByUsername(pg.ctx, pg.db, "test", nil)
+	adminUser, err := pg.createDevAdminUser()
 	if err != nil {
-		return fmt.Errorf("failed to get admin user: %w", err)
+		return err
 	}
 
 	communityDefs := []struct {
